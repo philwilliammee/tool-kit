@@ -4,6 +4,7 @@
  */
 
 import * as fs from 'fs/promises';
+import * as os from 'os';
 import * as path from 'path';
 import { createHash } from 'crypto';
 import { FileEditorConfig, LockInfo, BackupInfo } from './file-editor.types';
@@ -44,15 +45,15 @@ export class FileOperationsService {
         stream_threshold_bytes: 10485760,
       },
       workspace: {
-        root_paths: ['/home/ds123/ssit'],
+        root_paths: [process.env.WORKSPACE_ROOT || os.homedir()],
         excluded_patterns: ['node_modules', '.git', 'dist', 'build'],
         allowed_extensions: ['.js', '.ts', '.jsx', '.tsx', '.json', '.md', '.py', '.java', '.cpp', '.c', '.h', '.hpp'],
       },
       security: {
         sandboxing: {
           enabled: true,
-          allowed_paths: ['/home/ds123/ssit'],
-          denied_paths: ['/etc', '/sys', '/home/ds123/.ssh'],
+          allowed_paths: [process.env.WORKSPACE_ROOT || os.homedir()],
+          denied_paths: ['/etc', '/sys', `${os.homedir()}/.ssh`],
         },
         operation_limits: {
           max_files_per_batch: 50,

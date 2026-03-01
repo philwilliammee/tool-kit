@@ -1,6 +1,6 @@
 # tool-kit
 
-A TypeScript CLI AI agent with MCP tool servers. Run it interactively as a developer REPL, or invoke it one-shot from a script or CI pipeline.
+A super lightweight TypeScript AI agent built for cloud-based automated development. It ships with three core developer tools — **bash** (shell execution), **file-editor** (diff-based file editing with rollback), and **octokit** (GitHub API) — and can be extended with any MCP server. Run it interactively as a developer REPL, invoke it one-shot from a CI script, or call its HTTP API from any client.
 
 The backend connects to any **OpenAI-compatible API** — LiteLLM, OpenAI directly, Azure OpenAI, Ollama, Anthropic via proxy, or any other compatible endpoint. Point `OPENAI_BASE_URL` at whatever you're running.
 
@@ -16,7 +16,7 @@ The backend connects to any **OpenAI-compatible API** — LiteLLM, OpenAI direct
 | **Hosting** | Self-hosted server + CLI | Managed by Anthropic | Local-first, self-hosted |
 | **Extend** | Add MCP servers | Limited | Community skills / plugins |
 
-**tool-kit** is a super lightweight agent designed to run in a cloud environment: open source and self-hosted like OpenClaw, but narrowly focused on the software development workflow like Claude Code. The HTTP API boundary means any client — CLI, web UI, CI script — can use the same backend.
+**tool-kit** is a super lightweight agent designed to run in a cloud environment: open source and self-hosted like OpenClaw, but narrowly focused on automated software development like Claude Code. Its built-in bash, file-editor, and GitHub tools give the agent everything it needs to read code, open pull requests, run commands, and edit files — all from a single deployable server. The HTTP API boundary means any client — CLI, web UI, CI script — can drive the same backend.
 
 ```
 CLI  ──POST /api/chat/stream──▶  Express backend  ──▶  OpenAI-compatible API

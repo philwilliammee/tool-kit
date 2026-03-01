@@ -84,51 +84,58 @@ async function runQuery(
   // Accumulate tool calls to display with their results
   const pendingCalls = new Map<string, ToolCallChunk>();
 
-  await streamQuery({
-    serverUrl,
-    token,
-    messages,
-    model,
-    callbacks: {
-      onContent(delta) {
-        if (!spinnerStopped) {
-          spinner.stop();
-          spinnerStopped = true;
-        }
-        printContent(delta);
-        assistantContent += delta;
+  try {
+    await streamQuery({
+      serverUrl,
+      token,
+      messages,
+      model,
+      callbacks: {
+        onContent(delta) {
+          if (!spinnerStopped) {
+            spinner.stop();
+            spinnerStopped = true;
+          }
+          printContent(delta);
+          assistantContent += delta;
+        },
+        onToolCall(chunk) {
+          if (!spinnerStopped) {
+            spinner.stop();
+            spinnerStopped = true;
+          }
+          pendingCalls.set(chunk.id, chunk);
+        },
+        onToolResult(result) {
+          const call = pendingCalls.get(result.toolCallId);
+          if (call) {
+            printToolCall(call, result);
+            pendingCalls.delete(result.toolCallId);
+            addToolCall(session, result.name, call.arguments, result.content);
+          }
+        },
+        onComplete() {
+          if (!spinnerStopped) {
+            spinner.stop();
+            spinnerStopped = true;
+          }
+          if (assistantContent) printNewline();
+        },
+        onError(message) {
+          if (!spinnerStopped) {
+            spinner.stop();
+            spinnerStopped = true;
+          }
+          printError(message);
+        },
       },
-      onToolCall(chunk) {
-        if (!spinnerStopped) {
-          spinner.stop();
-          spinnerStopped = true;
-        }
-        pendingCalls.set(chunk.id, chunk);
-      },
-      onToolResult(result) {
-        const call = pendingCalls.get(result.toolCallId);
-        if (call) {
-          printToolCall(call, result);
-          pendingCalls.delete(result.toolCallId);
-          addToolCall(session, result.name, call.arguments, result.content);
-        }
-      },
-      onComplete() {
-        if (!spinnerStopped) {
-          spinner.stop();
-          spinnerStopped = true;
-        }
-        if (assistantContent) printNewline();
-      },
-      onError(message) {
-        if (!spinnerStopped) {
-          spinner.stop();
-          spinnerStopped = true;
-        }
-        printError(message);
-      },
-    },
-  });
+    });
+  } finally {
+    if (!spinnerStopped) {
+      spinner.stop();
+      spinnerStopped = true;
+    }
+  }
 
   if (assistantContent) addMessage(session, 'assistant', assistantContent);
   saveSession(session);

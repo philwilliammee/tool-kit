@@ -17,8 +17,8 @@ The project ships two independently deployable artifacts:
 
 | Artifact | Description |
 |----------|-------------|
-| `dist/server.js` | Express backend — owns the LiteLLM connection, MCP server lifecycle, and streaming API |
-| `dist/cli.js` | Thin CLI client — HTTP streaming, session persistence, terminal UI |
+| `dist/server/server.js` | Express backend — owns the LiteLLM connection, MCP server lifecycle, and streaming API |
+| `dist/cli/cli.js` | Thin CLI client — HTTP streaming, session persistence, terminal UI |
 
 ---
 
@@ -108,16 +108,15 @@ docker run -p 3333:3333 \
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  LiteLLM Proxy  (OPENAI_BASE_URL)                               │
-│  Default model: anthropic.claude-4.5-sonnet                     │
+│  Model: $MODEL env var (default: anthropic.claude-4.5-sonnet)  │
 └─────────────────────────────────────────────────────────────────┘
                             │ stdio — child_process.spawn per call
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  mcp/  (co-located in this workspace)                           │
-│    bash-server/           — shell command execution             │
-│    octokit-mcp-server/    — GitHub SDK (PRs, issues, repos)    │
+│    bash-server/            — shell command execution            │
+│    octokit-mcp-server/     — GitHub SDK (PRs, issues, repos)   │
 │    file-editor-mcp-server/ — diff / apply / rollback / search  │
-│    + additional servers from ssit/mcp                          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -192,7 +191,7 @@ interface ToolResult {
 // POST /api/chat/stream
 interface ChatRequest {
   messages: OpenAI.ChatCompletionMessageParam[];
-  model?: string;        // default: "anthropic.claude-4.5-sonnet"
+  model?: string;        // default: $MODEL env var, fallback "anthropic.claude-4.5-sonnet"
   temperature?: number;  // default: 0.7
   maxTokens?: number;    // default: 4096
 }
@@ -209,7 +208,6 @@ interface Session {
   lastActivity: string;          // ISO 8601
   messages: SessionMessage[];
   toolCalls: ToolCallRecord[];
-  commandsExecuted: CommandRecord[];
   filesViewed: string[];
 }
 
@@ -225,14 +223,6 @@ interface ToolCallRecord {
   arguments: Record<string, unknown>;
   result: string;
   resultLength: number;
-}
-
-interface CommandRecord {
-  timestamp: string;
-  command: string;
-  exitCode: number;
-  output: string;
-  outputLength: number;
 }
 ```
 
@@ -331,7 +321,7 @@ tool-kit                    # interactive REPL (no query arg)
 Options:
   -s, --server <url>    Backend URL         (default: http://localhost:3333)
   -t, --token <token>   Bearer token        (default: $API_TOKEN)
-  -m, --model <model>   LiteLLM model       (default: anthropic.claude-4.5-sonnet)
+  -m, --model <model>   LiteLLM model       (default: $MODEL or anthropic.claude-4.5-sonnet)
       --new-session     Force fresh session
   -V, --version
   -h, --help
@@ -437,7 +427,7 @@ cd mcp/file-editor-mcp-server && npm install && npx tsc
     },
     "file-editor": {
       "command": "node",
-      "args": ["${MCP_ROOT}/file-editor-mcp-server/build/index.js"],
+      "args": ["${MCP_ROOT}/file-editor-mcp-server/build/file-editor-mcp.js"],
       "transport": "stdio",
       "cwd": "${MCP_ROOT}/file-editor-mcp-server"
     }
@@ -455,10 +445,12 @@ cd mcp/file-editor-mcp-server && npm install && npx tsc
 |----------|----------|---------|-------------|
 | `OPENAI_API_KEY` | Yes | — | LiteLLM proxy API key |
 | `OPENAI_BASE_URL` | Yes | — | LiteLLM proxy base URL |
-| `API_TOKEN` | Yes | — | Bearer token for CLI → backend auth |
+| `MODEL` | No | `anthropic.claude-4.5-sonnet` | LiteLLM model string |
+| `API_TOKEN` | Yes | — | Bearer token for CLI → backend auth (any shared secret in dev) |
 | `PORT` | No | `3333` | Backend listen port |
 | `MCP_CONFIG_PATH` | No | `config/mcp-servers.json` | Path to MCP config file |
 | `MCP_ROOT` | No | `<project-root>/mcp` | Base path for all MCP server binaries |
+| `GITHUB_TOKEN` | No | — | GitHub PAT — passed to the octokit MCP server |
 
 ---
 
@@ -492,54 +484,63 @@ MCP servers each manage their own dependencies independently.
 
 ## 13. Docker Deployment
 
+Multi-stage build — compiles TypeScript and all three MCP servers inside the builder stage, then copies only the compiled output and production `node_modules` into a lean final image:
+
 ```dockerfile
+# Stage 1: Builder — install all deps and compile everything
+FROM node:22-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+# ... install + build each MCP server ...
+COPY tsconfig.json ./src/ ./
+RUN npm run build
+RUN npm prune --omit=dev
+
+# Stage 2: Final image
 FROM node:22-alpine
 WORKDIR /app
-COPY dist/        ./dist/
-COPY mcp/         ./mcp/
-COPY config/      ./config/
-COPY package.json ./
-RUN npm install --omit=dev
-HEALTHCHECK --interval=30s --timeout=5s \
-  CMD wget -qO- http://localhost:3333/health || exit 1
+RUN apk add --no-cache bash   # required by bash MCP server
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY config/ ./config/
+# MCP servers: build output + production node_modules only
+COPY --from=builder /app/mcp/*/build ./mcp/*/build
+COPY --from=builder /app/mcp/*/node_modules ./mcp/*/node_modules
 EXPOSE 3333
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/server/server.js"]
 ```
 
-MCP server binaries are pre-built (`build/` directories committed or built in a multi-stage Dockerfile). `MCP_ROOT` defaults to `/app/mcp` inside the container.
+`MCP_ROOT` defaults to `/app/mcp` inside the container. Env vars are injected at runtime via Docker `-e` or a secrets manager.
 
 ---
 
-## 14. Implementation Phases
+## 14. Implementation Status
 
-### Phase 1 — MCP Servers (complete)
-- `bash-server`, `octokit-mcp-server`, `file-editor-mcp-server` are in `mcp/`, built, and verified
+All phases are complete. The project is built, tested, and running.
+
+### Phase 1 — MCP Servers ✅
+- `bash-server`, `octokit-mcp-server`, `file-editor-mcp-server` in `mcp/`, built, and verified
 - `code.code-workspace` references all three as workspace folders
 
-### Phase 2 — Backend Core
+### Phase 2 — Backend Core ✅
+- `src/server/config.ts` — env validation, `mcp-servers.json` loading with `${VAR}` substitution
+- `src/server/mcp.service.ts` — stdio JSON-RPC client (`listAllTools`, `callTool`)
+- `src/server/ai.service.ts` — LiteLLM streaming + tool-call loop (max 20 iterations)
+- `src/server/server.ts` — Express app, `/api/chat/stream`, `/health`
 
-1. Install runtime dependencies; remove `app.ts` placeholder
-2. `src/server/config.ts` — env validation, `mcp-servers.json` loading with `${VAR}` substitution
-3. `src/server/mcp.service.ts` — stdio JSON-RPC client (`listAllTools`, `callTool`)
-4. `src/server/ai.service.ts` — LiteLLM streaming + tool-call loop
-5. `src/server/server.ts` — Express app, `/api/chat/stream`, `/health`
-6. Smoke-test: `curl` the stream endpoint with a bash tool call
+### Phase 3 — CLI Core ✅
+- `src/cli/session.ts` — load/save/cleanup (`~/.tool-kit-sessions/`)
+- `src/cli/client.ts` — axios stream + NDJSON chunk parser
+- `src/cli/display.ts` — chalk/ora rendering with bordered tool-call boxes
+- `src/cli/cli.ts` — commander entry, one-shot + interactive REPL
 
-### Phase 3 — CLI Core
-
-1. `src/cli/session.ts` — load/save/cleanup
-2. `src/cli/client.ts` — axios stream + chunk parser
-3. `src/cli/display.ts` — chalk/ora rendering
-4. `src/cli/cli.ts` — commander entry, one-shot + interactive modes
-5. Context injection in system prompt (cwd, user, git status, session history)
-6. Smoke-test: `npx ts-node src/cli/cli.ts "list files"`
-
-### Phase 4 — Polish & Packaging
-
-1. Interactive REPL session commands (`.session`, `.clear`, `.tools`)
-2. `package.json` bin entries: `tool-kit` + `tool-kit-server`
-3. `Dockerfile` + `.dockerignore`
-4. `config/mcp-servers.json` with `${MCP_ROOT}` references
+### Phase 4 — Polish & Packaging ✅
+- Interactive REPL using event-driven `readline.on('line')` pattern with keep-alive
+- `package.json` bin entries: `tool-kit` + `tool-kit-server`
+- Multi-stage `Dockerfile` + `.dockerignore`
+- `config/mcp-servers.json` with `${MCP_ROOT}` references
+- `MODEL` env var for configurable model with sonnet 4.5 fallback
 
 ---
 

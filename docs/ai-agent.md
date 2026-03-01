@@ -2,6 +2,8 @@
 
 # AI Agent — `ssit-terminal-ai` (`/bin/ai`)
 
+> **Status:** This document describes the reference implementation (`/bin/ai`) that `tool-kit` was modelled after. The `tool-kit` project is now **fully implemented** — see [`spec.md`](./spec.md) for the current architecture and status.
+
 ## Overview
 
 `/bin/ai` is the **SSIT Terminal AI Assistant**, a Node.js CLI tool installed globally as the npm package `ssit-terminal-ai` (v2.0.0). It provides an interactive, context-aware AI assistant directly in the terminal. The CLI connects to a backend Express server that proxies requests to an AI model through a **LiteLLM** proxy and executes tools via **MCP (Model Context Protocol)** servers over stdio.
@@ -501,17 +503,24 @@ The `tool-kit` project-code-workspace aims to implement the `/bin/ai` agent patt
 
 7. **Graceful Fallback** — When MCP tools are unavailable, fall back to built-in tool handlers so the assistant remains functional.
 
+8. **readline Keep-Alive Pattern** — Node.js may drop stdin from the event loop during async HTTP streaming. The correct interactive REPL pattern is event-driven (`rl.on('line', ...)`) rather than a `while` loop with `rl.question()`. Key elements:
+   - `readline.createInterface({ terminal: true })`
+   - `process.stdin.resume()` + `rl.resume()` at startup
+   - `setInterval(() => {}, 60 * 60 * 1000)` to prevent the event loop from draining between queries
+   - `rl.pause()` before async work, `rl.resume(); rl.prompt()` after
+   - `await new Promise(resolve => rl.once('close', resolve))` to hold the function open until exit
+
 ### Minimum Required MCP Servers for Developer Workflow
 
 For a standard development workspace the following MCP servers are the core tool set:
 
-| Server | Purpose | Location |
+| Server | Purpose | Location (monorepo) |
 |--------|---------|----------|
-| `bash` | Execute shell commands | `/home/ds123/ssit/mcp/bash-server/build/index.js` |
-| `octokit` | Git/GitHub SDK operations | `/home/ds123/ssit/mcp/octokit-mcp-server/build/index.js` |
-| `file-editor` | Intelligent file editing | `/home/ds123/ssit/ssit-projects-task-manager/dist/modules/mcp-servers/file-editor-mcp/file-editor-mcp.js` |
+| `bash` | Execute shell commands | `mcp/bash-server/build/index.js` |
+| `octokit` | Git/GitHub SDK operations | `mcp/octokit-mcp-server/build/index.js` |
+| `file-editor` | Intelligent file editing | `mcp/file-editor-mcp-server/build/file-editor-mcp.js` |
 
-These three form the core "developer agent" tool set referenced in the project goal.
+All three are co-located in `mcp/` in this monorepo and wired in `config/mcp-servers.json` via `${MCP_ROOT}` substitution.
 
 ---
 

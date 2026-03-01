@@ -1,10 +1,26 @@
 # tool-kit
 
-A TypeScript CLI AI agent backed by LiteLLM and MCP servers. Run it interactively as a developer assistant, or invoke it one-shot from a script or CI pipeline.
+A TypeScript CLI AI agent with MCP tool servers. Run it interactively as a developer REPL, or invoke it one-shot from a script or CI pipeline.
+
+The backend connects to any **OpenAI-compatible API** — LiteLLM, OpenAI directly, Azure OpenAI, Ollama, Anthropic via proxy, or any other compatible endpoint. Point `OPENAI_BASE_URL` at whatever you're running.
+
+## How it compares
+
+| | tool-kit | [Claude Code](https://claude.ai/code) | [OpenClaw](https://openclaw.ai) |
+|---|---|---|---|
+| **Focus** | Developer coding agent | Developer coding agent | Personal automation assistant |
+| **Source** | Open source | Closed source | Open source |
+| **Transport** | HTTP API (CLI is one client) | Tightly coupled CLI | Multi-channel (WhatsApp, Telegram, Discord…) |
+| **Model** | Any OpenAI-compatible API | Claude only | Multiple models with failover |
+| **Tools** | Bash, GitHub, file editing (MCP) | File editing, bash, web search | Browser, email, calendar, shell, plugins |
+| **Hosting** | Self-hosted server + CLI | Managed by Anthropic | Local-first, self-hosted |
+| **Extend** | Add MCP servers | Limited | Community skills / plugins |
+
+**tool-kit** occupies the middle ground: open source and self-hosted like OpenClaw, but narrowly focused on the software development workflow like Claude Code. The HTTP API boundary means any client — CLI, web UI, CI script — can use the same backend.
 
 ```
-CLI  ──POST /api/chat/stream──▶  Express backend  ──▶  LiteLLM proxy
-                                        │
+CLI  ──POST /api/chat/stream──▶  Express backend  ──▶  OpenAI-compatible API
+                                        │                (LiteLLM, OpenAI, Ollama, …)
                               stdio (per tool call)
                                         │
                              ┌──────────┴──────────┐
@@ -14,54 +30,68 @@ CLI  ──POST /api/chat/stream──▶  Express backend  ──▶  LiteLLM p
 ## Quick start
 
 ```bash
-# Install dependencies
+# 1. Copy environment config and fill in your values
+cp .env.example .env
+
+# 2. Install root dependencies
 npm install
 
-# Build
-npx tsc
+# 3. Build MCP servers
+for dir in mcp/bash-server mcp/octokit-mcp-server mcp/file-editor-mcp-server; do
+  (cd "$dir" && npm install && npm run build)
+done
 
-# Start the backend server
-node dist/server.js
+# 4. Build the main project
+npm run build
 
-# One-shot query
-node dist/cli.js "what branch am I on?"
+# 5. Start the backend server (keep this running)
+npm run start
 
-# Interactive REPL
-node dist/cli.js
+# 6. In a second terminal — one-shot query
+node --env-file=.env dist/cli/cli.js "what branch am I on?"
+
+# 7. Or launch the interactive REPL
+node --env-file=.env dist/cli/cli.js
 ```
 
-### Required environment variables
+## Environment variables
 
-| Variable | Description |
-|----------|-------------|
-| `OPENAI_API_KEY` | LiteLLM proxy API key |
-| `OPENAI_BASE_URL` | LiteLLM proxy base URL |
-| `API_TOKEN` | Bearer token for CLI → backend auth |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OPENAI_API_KEY` | Yes | API key for your OpenAI-compatible endpoint |
+| `OPENAI_BASE_URL` | Yes | Base URL of your OpenAI-compatible endpoint (LiteLLM, OpenAI, Ollama, etc.) |
+| `API_TOKEN` | Yes | Shared secret for CLI → backend auth |
+| `MODEL` | No | LiteLLM model string (default: `anthropic.claude-4.5-sonnet`) |
+| `GITHUB_TOKEN` | No | GitHub PAT for the octokit MCP server |
+| `WORKSPACE_ROOT` | No | Root path the file-editor can access (default: `$HOME`) |
+
+See `.env.example` for a full template.
+
+## Interactive REPL commands
+
+| Command | Description |
+|---------|-------------|
+| `.session` | Show session stats (messages, tool calls) |
+| `.clear` | Clear session message history |
+| `.tools` | List tool calls made this session |
+| `exit` / `quit` | Exit |
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
-| [docs/spec.md](./docs/spec.md) | Full project specification — architecture, TypeScript interfaces, API contract, MCP config, implementation phases |
-| [docs/ai-agent.md](./docs/ai-agent.md) | Reference documentation for the `ssit-terminal-ai` `/bin/ai` agent this project is modelled on |
-| [docs/index.md](./docs/index.md) | Docs table of contents |
+| [docs/spec.md](./docs/spec.md) | Architecture, TypeScript interfaces, API contract, env vars, MCP config |
+| [docs/README.md](./docs/README.md) | Docs index |
 
 ## MCP Servers
 
 | Server | Description |
 |--------|-------------|
-| [mcp/README.md](./mcp/README.md) | MCP server overview — protocol, build instructions, adding new servers |
 | [mcp/bash-server](./mcp/bash-server/README.md) | Shell command execution with safety controls |
 | [mcp/octokit-mcp-server](./mcp/octokit-mcp-server/README.md) | GitHub API — repos, issues, pull requests |
 | [mcp/file-editor-mcp-server](./mcp/file-editor-mcp-server/README.md) | Intelligent file editing — diff, apply, rollback, search |
 
-## Build MCP servers
-
-```bash
-for dir in mcp/bash-server mcp/octokit-mcp-server mcp/file-editor-mcp-server; do
-  (cd "$dir" && npm install && npm run build)
-done
-```
+See [mcp/README.md](./mcp/README.md) for the protocol reference and instructions for adding new servers.
 
 ## Project layout
 
@@ -71,7 +101,7 @@ tool-kit/
 │   ├── cli/        # CLI client (commander, axios streaming, session, display)
 │   └── server/     # Express backend (LiteLLM, MCP service, config)
 ├── mcp/            # MCP tool servers (each independently buildable)
-├── config/         # mcp-servers.json (MCP binary paths, ${VAR} substitution)
-├── dist/           # Compiled output
-└── docs/           # Architecture docs and project spec
+├── config/         # mcp-servers.json — MCP binary paths, ${VAR} substitution
+├── dist/           # Compiled output (tsc)
+└── docs/           # Project documentation and spec
 ```

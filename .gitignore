@@ -29,3 +29,7 @@ Thumbs.db
 .history/
 *.swp
 *.swo
+
+# Local development files
+.local
+archive

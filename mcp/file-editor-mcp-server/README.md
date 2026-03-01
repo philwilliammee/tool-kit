@@ -9,7 +9,11 @@ npm install
 npm run build
 ```
 
-No environment variables required. The server operates on the local filesystem using absolute or workspace-relative paths.
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `WORKSPACE_ROOT` | No | Root path the server is allowed to access (default: `$HOME`) |
+
+Set `WORKSPACE_ROOT` to restrict file access to a specific directory tree. When used via tool-kit, this is passed automatically from `config/mcp-servers.json`.
 
 ## Tools
 

@@ -1,4 +1,4 @@
-[← Documentation Index](./index.md)
+[← Documentation](./README.md)
 
 # tool-kit — Project Specification
 
@@ -146,8 +146,8 @@ tool-kit/
 ├── dist/                   # tsc output (CommonJS ES6)
 ├── docs/
 │   ├── index.md
-│   ├── ai-agent.md         # reference architecture (ssit-terminal-ai)
-│   └── spec.md             # this document
+│   ├── spec.md             # this document
+│   └── archive/            # historical reference docs
 ├── Dockerfile
 ├── code.code-workspace
 ├── package.json
@@ -555,4 +555,4 @@ All phases are complete. The project is built, tested, and running.
 
 ---
 
-[← Documentation Index](./index.md)
+[← Documentation](./README.md)

@@ -451,6 +451,7 @@ cd mcp/file-editor-mcp-server && npm install && npx tsc
 | `MCP_CONFIG_PATH` | No | `config/mcp-servers.json` | Path to MCP config file |
 | `MCP_ROOT` | No | `<project-root>/mcp` | Base path for all MCP server binaries |
 | `GITHUB_TOKEN` | No | — | GitHub PAT — passed to the octokit MCP server |
+| `WORKSPACE_ROOT` | No | `$HOME` | Root path the file-editor MCP server can access |
 
 ---
 

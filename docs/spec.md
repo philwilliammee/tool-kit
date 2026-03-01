@@ -1,4 +1,4 @@
-[← Documentation Index](./index.md)
+[← Documentation](./README.md)
 
 # tool-kit — Project Specification
 
@@ -555,4 +555,4 @@ All phases are complete. The project is built, tested, and running.
 
 ---
 
-[← Documentation Index](./index.md)
+[← Documentation](./README.md)

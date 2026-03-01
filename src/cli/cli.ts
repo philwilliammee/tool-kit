@@ -55,7 +55,7 @@ function buildSystemPrompt(cwd: string, session: Session): string {
   if (session.messages.length > 0) {
     lines.push('', `## Session`, `${session.messages.length} messages, ${session.toolCalls.length} tool calls today`);
   }
-  lines.push('', '## Instructions', 'Use tools to complete tasks. Be concise and direct in responses.');
+  lines.push('', '## Instructions', 'Use tools to complete tasks. Be concise and direct in responses.', `Always pass cwd: "${cwd}" when invoking bash tools so commands run in the correct working directory.`);
   return lines.join('\n');
 }
 

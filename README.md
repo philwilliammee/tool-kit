@@ -4,6 +4,20 @@ A TypeScript CLI AI agent with MCP tool servers. Run it interactively as a devel
 
 The backend connects to any **OpenAI-compatible API** — LiteLLM, OpenAI directly, Azure OpenAI, Ollama, Anthropic via proxy, or any other compatible endpoint. Point `OPENAI_BASE_URL` at whatever you're running.
 
+## How it compares
+
+| | tool-kit | [Claude Code](https://claude.ai/code) | [OpenClaw](https://openclaw.ai) |
+|---|---|---|---|
+| **Focus** | Developer coding agent | Developer coding agent | Personal automation assistant |
+| **Source** | Open source | Closed source | Open source |
+| **Transport** | HTTP API (CLI is one client) | Tightly coupled CLI | Multi-channel (WhatsApp, Telegram, Discord…) |
+| **Model** | Any OpenAI-compatible API | Claude only | Multiple models with failover |
+| **Tools** | Bash, GitHub, file editing (MCP) | File editing, bash, web search | Browser, email, calendar, shell, plugins |
+| **Hosting** | Self-hosted server + CLI | Managed by Anthropic | Local-first, self-hosted |
+| **Extend** | Add MCP servers | Limited | Community skills / plugins |
+
+**tool-kit** occupies the middle ground: open source and self-hosted like OpenClaw, but narrowly focused on the software development workflow like Claude Code. The HTTP API boundary means any client — CLI, web UI, CI script — can use the same backend.
+
 ```
 CLI  ──POST /api/chat/stream──▶  Express backend  ──▶  OpenAI-compatible API
                                         │                (LiteLLM, OpenAI, Ollama, …)

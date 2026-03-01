@@ -1,10 +1,12 @@
 # tool-kit
 
-A TypeScript CLI AI agent backed by LiteLLM and MCP servers. Run it interactively as a developer REPL, or invoke it one-shot from a script or CI pipeline.
+A TypeScript CLI AI agent with MCP tool servers. Run it interactively as a developer REPL, or invoke it one-shot from a script or CI pipeline.
+
+The backend connects to any **OpenAI-compatible API** — LiteLLM, OpenAI directly, Azure OpenAI, Ollama, Anthropic via proxy, or any other compatible endpoint. Point `OPENAI_BASE_URL` at whatever you're running.
 
 ```
-CLI  ──POST /api/chat/stream──▶  Express backend  ──▶  LiteLLM proxy
-                                        │
+CLI  ──POST /api/chat/stream──▶  Express backend  ──▶  OpenAI-compatible API
+                                        │                (LiteLLM, OpenAI, Ollama, …)
                               stdio (per tool call)
                                         │
                              ┌──────────┴──────────┐
@@ -42,8 +44,8 @@ node --env-file=.env dist/cli/cli.js
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `OPENAI_API_KEY` | Yes | LiteLLM proxy API key |
-| `OPENAI_BASE_URL` | Yes | LiteLLM proxy base URL |
+| `OPENAI_API_KEY` | Yes | API key for your OpenAI-compatible endpoint |
+| `OPENAI_BASE_URL` | Yes | Base URL of your OpenAI-compatible endpoint (LiteLLM, OpenAI, Ollama, etc.) |
 | `API_TOKEN` | Yes | Shared secret for CLI → backend auth |
 | `MODEL` | No | LiteLLM model string (default: `anthropic.claude-4.5-sonnet`) |
 | `GITHUB_TOKEN` | No | GitHub PAT for the octokit MCP server |

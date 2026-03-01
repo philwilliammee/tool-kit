@@ -153,7 +153,12 @@ async function interactiveMode(serverUrl: string, token: string, model: string, 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
   const prompt = (): Promise<string> =>
-    new Promise(resolve => rl.question('\x1b[36m❯\x1b[0m ', resolve));
+    new Promise((resolve, reject) =>
+      rl.question('\x1b[36m❯\x1b[0m ', answer => {
+        if (answer == null) reject(new Error('EOF'));
+        else resolve(answer);
+      }),
+    );
 
   while (true) {
     let input: string;
@@ -195,6 +200,7 @@ async function interactiveMode(serverUrl: string, token: string, model: string, 
     } catch (err) {
       printError((err as Error).message);
     }
+    rl.resume();
   }
 
   rl.close();

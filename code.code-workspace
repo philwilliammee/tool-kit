@@ -1,7 +1,22 @@
 {
-  "folders": [{
-    "path": "./"
-  }],
+  "folders": [
+    {
+      "name": "tool-kit",
+      "path": "./"
+    },
+    {
+      "name": "mcp: bash-server",
+      "path": "./mcp/bash-server"
+    },
+    {
+      "name": "mcp: octokit",
+      "path": "./mcp/octokit-mcp-server"
+    },
+    {
+      "name": "mcp: file-editor",
+      "path": "./mcp/file-editor-mcp-server"
+    }
+  ],
   "settings": {
     "breadcrumbs.enabled": true,
     "css.validate": true,
@@ -24,15 +39,15 @@
     "[javascript]": {
       "editor.tabSize": 2,
       "editor.formatOnSave": true,
-      "files.trimTrailingWhitespace": true,
+      "files.trimTrailingWhitespace": true
     },
     "[typescript]": {
       "editor.tabSize": 2,
       "editor.formatOnSave": true,
-      "files.trimTrailingWhitespace": true,
+      "files.trimTrailingWhitespace": true
     },
     "[markdown]": {
-      "editor.trimAutoWhitespace": false,
+      "editor.trimAutoWhitespace": false
     }
-  },
+  }
 }

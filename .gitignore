@@ -1,42 +1,31 @@
-node_modules
+# Dependencies
+node_modules/
 
-#angular
-# Compiled output
-/dist
-/client/tmp
-/client/out-tsc
-/bazel-out
+# Build output
+dist/
+mcp/*/build/
 
-# Node
-npm-debug.log
-yarn-error.log
+# Environment — never commit secrets
+.env
+.env.local
+.env.*.local
 
-# IDEs and editors
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
 .idea/
-.project
-.classpath
-.c9/
-*.launch
-.settings/
-*.sublime-workspace
-
-# Visual Studio Code
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
-.history/*
-
-# Miscellaneous
-/.angular/cache
-.sass-cache/
-/client/connect.lock
-/client/coverage
-/client/libpeerconnection.log
-testem.log
-/client/typings
-
-# System files
-.DS_Store
-Thumbs.db
+.history/
+*.swp
+*.swo

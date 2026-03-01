@@ -1,0 +1,29 @@
+{
+  "name": "bash-server",
+  "version": "1.0.0",
+  "description": "MCP server for secure bash command execution",
+  "type": "module",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "tsc --watch",
+    "clean": "rm -rf build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "bash",
+    "shell",
+    "command",
+    "execution"
+  ],
+  "author": "Cornell SSIT",
+  "license": "MIT"
+}

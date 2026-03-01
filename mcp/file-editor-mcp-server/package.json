@@ -1,0 +1,22 @@
+{
+  "name": "file-editor-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for intelligent file editing — diff, apply, rollback, search",
+  "main": "build/file-editor-mcp.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/file-editor-mcp.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.5",
+    "diff": "^5.2.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/diff": "^5.2.0",
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^10.0.0",
+    "typescript": "^5.5.4"
+  },
+  "license": "MIT"
+}

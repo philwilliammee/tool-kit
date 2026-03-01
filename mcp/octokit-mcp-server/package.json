@@ -1,0 +1,36 @@
+{
+  "name": "octokit-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for GitHub API operations using Octokit with SSE transport",
+  "main": "build/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node --env-file=.env build/index.js",
+    "start:http": "MCP_TRANSPORT=http node --env-file=.env build/index.js",
+    "start:sse": "MCP_TRANSPORT=sse node --env-file=.env build/index.js",
+    "dev": "tsc --watch",
+    "clean": "rm -rf build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "octokit": "^4.0.2",
+    "express": "^4.19.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "typescript": "^5.3.0"
+  },
+  "keywords": [
+    "mcp",
+    "github",
+    "octokit",
+    "api",
+    "sse"
+  ],
+  "author": "Tool-Bot",
+  "license": "MIT"
+}

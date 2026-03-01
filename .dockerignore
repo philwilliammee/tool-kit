@@ -1,0 +1,26 @@
+# Dependencies — reinstalled during image build
+node_modules/
+mcp/*/node_modules/
+
+# TypeScript source — only compiled output is needed
+src/
+mcp/*/src/
+tsconfig.json
+mcp/*/tsconfig.json
+
+# Docs and config files
+docs/
+*.md
+CLAUDE.md
+code.code-workspace
+
+# Git
+.git/
+.gitignore
+
+# Environment — injected at runtime via env vars
+.env
+.env.*
+
+# Logs
+*.log

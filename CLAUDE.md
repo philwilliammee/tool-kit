@@ -70,7 +70,11 @@ MCP server configuration: `config/mcp-servers.json` (uses `${VAR}` substitution)
 | `OPENAI_API_KEY` | LiteLLM proxy API key |
 | `OPENAI_BASE_URL` | LiteLLM proxy base URL |
 | `API_TOKEN` | Bearer token for CLI → backend authentication |
+| `PORT` | Server port (default: `3333`) |
 | `MCP_ROOT` | Base path for MCP server binaries (default: `<project-root>/mcp`) |
+| `GITHUB_TOKEN` | GitHub personal access token for the octokit MCP server |
+
+> **Development**: set `API_TOKEN` to any shared secret string in your local `.env` file (e.g. `API_TOKEN=dev-secret`). Pass the same value to the CLI with `--token` or the `API_TOKEN` env var. In production, inject it via Docker `-e` or a secrets manager — never commit the real value.
 
 ---
 

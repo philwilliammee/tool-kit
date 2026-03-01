@@ -2,11 +2,6 @@
 node_modules/
 mcp/*/node_modules/
 
-# TypeScript source — only compiled output is needed
-src/
-mcp/*/src/
-tsconfig.json
-mcp/*/tsconfig.json
 
 # Docs and config files
 docs/

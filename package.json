@@ -1,19 +1,36 @@
 {
   "name": "tool-kit",
   "version": "1.0.0",
-  "main": "dist/app.js",
+  "description": "CLI AI agent backed by LiteLLM and MCP servers",
+  "bin": {
+    "tool-kit": "./dist/cli/cli.js",
+    "tool-kit-server": "./dist/server/server.js"
+  },
   "scripts": {
-    "start": "tsc && node dist/app.js"
+    "build": "tsc",
+    "start": "node --env-file=.env dist/server/server.js",
+    "start:cli": "node --env-file=.env dist/cli/cli.js",
+    "dev": "tsc --watch"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "dependencies": {
+    "axios": "^1.7.9",
+    "chalk": "^4.1.2",
+    "commander": "^12.1.0",
+    "express": "^4.21.2",
+    "openai": "^4.77.0",
+    "ora": "^5.4.1",
+    "uuid": "^11.0.5"
+  },
   "devDependencies": {
-    "@types/node": "^25.3.3",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
-    "eslint": "^10.0.2",
-    "typescript": "^5.9.3"
+    "eslint": "^9.0.0",
+    "typescript": "^5.7.3"
   }
 }

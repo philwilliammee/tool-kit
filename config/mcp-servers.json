@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "bash": {
+      "command": "node",
+      "args": ["${MCP_ROOT}/bash-server/build/index.js"],
+      "transport": "stdio"
+    },
+    "octokit": {
+      "command": "node",
+      "args": ["${MCP_ROOT}/octokit-mcp-server/build/index.js"],
+      "transport": "stdio",
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "file-editor": {
+      "command": "node",
+      "args": ["${MCP_ROOT}/file-editor-mcp-server/build/file-editor-mcp.js"],
+      "transport": "stdio",
+      "cwd": "${MCP_ROOT}/file-editor-mcp-server"
+    }
+  }
+}

@@ -16,7 +16,7 @@ The backend connects to any **OpenAI-compatible API** — LiteLLM, OpenAI direct
 | **Hosting** | Self-hosted server + CLI | Managed by Anthropic | Local-first, self-hosted |
 | **Extend** | Add MCP servers | Limited | Community skills / plugins |
 
-**tool-kit** occupies the middle ground: open source and self-hosted like OpenClaw, but narrowly focused on the software development workflow like Claude Code. The HTTP API boundary means any client — CLI, web UI, CI script — can use the same backend.
+**tool-kit** is a super lightweight agent designed to run in a cloud environment: open source and self-hosted like OpenClaw, but narrowly focused on the software development workflow like Claude Code. The HTTP API boundary means any client — CLI, web UI, CI script — can use the same backend.
 
 ```
 CLI  ──POST /api/chat/stream──▶  Express backend  ──▶  OpenAI-compatible API

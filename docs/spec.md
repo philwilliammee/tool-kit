@@ -145,7 +145,7 @@ tool-kit/
 │   └── mcp-servers.json    # MCP server paths — ${VAR} substitution
 ├── dist/                   # tsc output (CommonJS ES6)
 ├── docs/
-│   ├── index.md
+│   ├── README.md           # docs index
 │   ├── spec.md             # this document
 │   └── archive/            # historical reference docs
 ├── Dockerfile
@@ -319,7 +319,7 @@ tool-kit [query]            # one-shot (stream response, then exit)
 tool-kit                    # interactive REPL (no query arg)
 
 Options:
-  -s, --server <url>    Backend URL         (default: http://localhost:3333)
+  -s, --server <url>    Backend URL         (default: $TOOL_KIT_SERVER or http://localhost:3333)
   -t, --token <token>   Bearer token        (default: $API_TOKEN)
   -m, --model <model>   LiteLLM model       (default: $MODEL or anthropic.claude-4.5-sonnet)
       --new-session     Force fresh session
@@ -423,13 +423,15 @@ cd mcp/file-editor-mcp-server && npm install && npx tsc
     "octokit": {
       "command": "node",
       "args": ["${MCP_ROOT}/octokit-mcp-server/build/index.js"],
-      "transport": "stdio"
+      "transport": "stdio",
+      "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
     },
     "file-editor": {
       "command": "node",
       "args": ["${MCP_ROOT}/file-editor-mcp-server/build/file-editor-mcp.js"],
       "transport": "stdio",
-      "cwd": "${MCP_ROOT}/file-editor-mcp-server"
+      "cwd": "${MCP_ROOT}/file-editor-mcp-server",
+      "env": { "WORKSPACE_ROOT": "${WORKSPACE_ROOT}" }
     }
   }
 }
@@ -452,6 +454,7 @@ cd mcp/file-editor-mcp-server && npm install && npx tsc
 | `MCP_ROOT` | No | `<project-root>/mcp` | Base path for all MCP server binaries |
 | `GITHUB_TOKEN` | No | — | GitHub PAT — passed to the octokit MCP server |
 | `WORKSPACE_ROOT` | No | `$HOME` | Root path the file-editor MCP server can access |
+| `TOOL_KIT_SERVER` | No | `http://localhost:3333` | CLI default backend URL (overrides built-in default; `--server` flag takes precedence) |
 
 ---
 

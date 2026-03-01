@@ -146,8 +146,8 @@ tool-kit/
 ├── dist/                   # tsc output (CommonJS ES6)
 ├── docs/
 │   ├── index.md
-│   ├── ai-agent.md         # reference architecture (ssit-terminal-ai)
-│   └── spec.md             # this document
+│   ├── spec.md             # this document
+│   └── archive/            # historical reference docs
 ├── Dockerfile
 ├── code.code-workspace
 ├── package.json

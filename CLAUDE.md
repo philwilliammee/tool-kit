@@ -34,8 +34,8 @@ It is also the **monorepo home for all MCP tool servers**, which live in `mcp/` 
 
 Full reference documentation lives in `docs/`:
 - `docs/spec.md` — full project specification (architecture, interfaces, phases)
-- `docs/ai-agent.md` — reference architecture from `ssit-terminal-ai` (`/bin/ai`)
 - `docs/index.md` — documentation table of contents
+- `docs/archive/` — historical reference material (not part of active docs)
 
 ## Architecture
 
@@ -90,8 +90,8 @@ This project uses a **layered README index** pattern. Every directory that conta
 README.md                          ← project root — indexes everything
 ├── docs/README.md                 ← indexes all docs/ files
 │   ├── docs/spec.md
-│   ├── docs/ai-agent.md
-│   └── docs/index.md
+│   ├── docs/index.md
+│   └── docs/archive/              ← historical reference (not indexed)
 └── mcp/README.md                  ← indexes all MCP servers
     ├── mcp/bash-server/README.md
     ├── mcp/octokit-mcp-server/README.md

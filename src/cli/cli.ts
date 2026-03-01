@@ -27,7 +27,7 @@ import {
 } from './display';
 
 const DEFAULT_SERVER = 'http://localhost:3333';
-const DEFAULT_MODEL = 'anthropic.claude-4.5-sonnet';
+const DEFAULT_MODEL = process.env.MODEL ?? 'anthropic.claude-4.5-sonnet';
 
 function gitBranch(): string {
   try {

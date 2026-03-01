@@ -69,6 +69,7 @@ MCP server configuration: `config/mcp-servers.json` (uses `${VAR}` substitution)
 |----------|---------|
 | `OPENAI_API_KEY` | LiteLLM proxy API key |
 | `OPENAI_BASE_URL` | LiteLLM proxy base URL |
+| `MODEL` | LiteLLM model string (default: `anthropic.claude-4.5-sonnet`) |
 | `API_TOKEN` | Bearer token for CLI → backend authentication |
 | `PORT` | Server port (default: `3333`) |
 | `MCP_ROOT` | Base path for MCP server binaries (default: `<project-root>/mcp`) |

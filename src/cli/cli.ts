@@ -144,73 +144,73 @@ async function runQuery(
 async function interactiveMode(serverUrl: string, token: string, model: string, newSession: boolean): Promise<void> {
   const cwd = process.cwd();
   cleanupOldSessions();
-  const session = newSession ? {
-    sessionId: require('uuid').v4(),
-    sessionKey: 'new',
-    workingDirectory: cwd,
-    startedAt: new Date().toISOString(),
-    lastActivity: new Date().toISOString(),
-    messages: [],
-    toolCalls: [],
-    filesViewed: [],
-  } : loadSession(cwd);
+  const session = newSession
+    ? {
+        sessionId: require('uuid').v4(),
+        sessionKey: 'new',
+        workingDirectory: cwd,
+        startedAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString(),
+        messages: [],
+        toolCalls: [],
+        filesViewed: [],
+      }
+    : loadSession(cwd);
 
   printBanner();
 
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
 
-  const prompt = (): Promise<string> =>
-    new Promise((resolve, reject) =>
-      rl.question('\x1b[36m❯\x1b[0m ', answer => {
-        if (answer == null) reject(new Error('EOF'));
-        else resolve(answer);
-      }),
-    );
+  // Keep stdin and readline alive across async queries
+  rl.resume();
+  process.stdin.resume();
 
-  while (true) {
-    let input: string;
+  // Prevent the event loop from draining between queries
+  const keepAlive = setInterval(() => {}, 60 * 60 * 1000);
+  rl.on('close', () => clearInterval(keepAlive));
+
+  rl.setPrompt('\x1b[36m❯\x1b[0m ');
+  rl.prompt();
+
+  rl.on('line', async (line) => {
+    const input = line.trim();
+    rl.pause();
+
     try {
-      input = (await prompt()).trim();
-    } catch {
-      break; // Ctrl+D
-    }
-
-    if (!input) continue;
-
-    if (input === 'exit' || input === 'quit') break;
-
-    if (input === '.session') {
-      printInfo(sessionStats(session));
-      continue;
-    }
-
-    if (input === '.clear') {
-      session.messages = [];
-      saveSession(session);
-      printInfo('Session messages cleared.');
-      continue;
-    }
-
-    if (input === '.tools') {
-      if (session.toolCalls.length === 0) {
-        printInfo('No tool calls this session.');
-      } else {
-        for (const tc of session.toolCalls) {
-          printInfo(`[${new Date(tc.timestamp).toLocaleTimeString()}] ${tc.tool} → ${tc.resultLength} bytes`);
+      if (!input) {
+        // ignore empty lines
+      } else if (input === 'exit' || input === 'quit') {
+        rl.close();
+        return;
+      } else if (input === '.session') {
+        printInfo(sessionStats(session));
+      } else if (input === '.clear') {
+        session.messages = [];
+        saveSession(session);
+        printInfo('Session messages cleared.');
+      } else if (input === '.tools') {
+        if (session.toolCalls.length === 0) {
+          printInfo('No tool calls this session.');
+        } else {
+          for (const tc of session.toolCalls) {
+            printInfo(`[${new Date(tc.timestamp).toLocaleTimeString()}] ${tc.tool} → ${tc.resultLength} bytes`);
+          }
         }
+      } else {
+        await runQuery(input, session, serverUrl, token, model);
       }
-      continue;
-    }
-
-    try {
-      await runQuery(input, session, serverUrl, token, model);
     } catch (err) {
       printError((err as Error).message);
     }
-    rl.resume();
-  }
 
-  rl.close();
+    rl.resume();
+    rl.prompt();
+  });
+
+  rl.on('SIGINT', () => rl.prompt());
+
+  // Wait until the interface is explicitly closed (exit/quit or Ctrl+D)
+  await new Promise<void>(resolve => rl.once('close', resolve));
   process.exit(0);
 }
 

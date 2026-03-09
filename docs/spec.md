@@ -131,12 +131,19 @@ tool-kit/
 │   │   ├── cli.ts          # commander entry, mode dispatch
 │   │   ├── client.ts       # HTTP POST, axios stream parsing
 │   │   ├── display.ts      # chalk/ora terminal rendering
-│   │   └── session.ts      # ~/.tool-kit-sessions/ JSON persistence
+│   │   ├── session.ts      # ~/.tool-kit-sessions/ JSON persistence
+│   │   ├── agents.ts       # AGENTS.md loader (user instructions)
+│   │   └── skills.ts       # skill discovery, frontmatter parsing, rendering
 │   └── server/
 │       ├── server.ts       # Express app bootstrap
-│       ├── ai.service.ts   # LiteLLM integration, tool-call loop
+│       ├── ai.service.ts   # LiteLLM integration, tool-call loop + hooks
 │       ├── mcp.service.ts  # MCP stdio JSON-RPC client
+│       ├── hooks.service.ts # lifecycle hook execution (command + HTTP)
 │       └── config.ts       # env + mcp-servers.json
+├── .tool-kit/              # project-level extensibility config (optional, committable)
+│   ├── AGENTS.md           # project standing instructions (injected into every system prompt)
+│   ├── settings.json       # hook configuration
+│   └── skills/<name>/      # project-scoped skills (SKILL.md + optional scripts)
 ├── mcp/                    # MCP tool servers
 │   ├── bash-server/
 │   ├── octokit-mcp-server/
@@ -191,9 +198,10 @@ interface ToolResult {
 // POST /api/chat/stream
 interface ChatRequest {
   messages: OpenAI.ChatCompletionMessageParam[];
-  model?: string;        // default: $MODEL env var, fallback "anthropic.claude-4.5-sonnet"
-  temperature?: number;  // default: 0.7
-  maxTokens?: number;    // default: 4096
+  model?: string;              // default: $MODEL env var, fallback "anthropic.claude-4.5-sonnet"
+  temperature?: number;        // default: 0.7
+  maxTokens?: number;          // default: 4096
+  workingDirectory?: string;   // for hook context; defaults to process.cwd()
 }
 ```
 
@@ -201,14 +209,15 @@ interface ChatRequest {
 
 ```typescript
 interface Session {
-  sessionId: string;             // uuid
-  sessionKey: string;            // "{sha1(cwd)}_{YYYY-MM-DD}"
+  sessionId: string;                // uuid
+  sessionKey: string;               // "{sha1(cwd)}_{YYYY-MM-DD}"
   workingDirectory: string;
-  startedAt: string;             // ISO 8601
-  lastActivity: string;          // ISO 8601
+  startedAt: string;                // ISO 8601
+  lastActivity: string;             // ISO 8601
   messages: SessionMessage[];
   toolCalls: ToolCallRecord[];
   filesViewed: string[];
+  skillInjections: SkillInjection[]; // skills invoked this session
 }
 
 interface SessionMessage {
@@ -223,6 +232,12 @@ interface ToolCallRecord {
   arguments: Record<string, unknown>;
   result: string;
   resultLength: number;
+}
+
+interface SkillInjection {
+  name: string;
+  content: string;    // fully rendered "[skill: name]\n..." block
+  injectedAt: string; // ISO 8601
 }
 ```
 
@@ -264,16 +279,23 @@ Initialise:
   baseURL = process.env.OPENAI_BASE_URL
 
 streamChat(request, res):
-  1. Load MCP tools via mcp.service.listAllTools()
-  2. Call openai.chat.completions.create({ stream: true, tools, ...request })
-  3. Accumulate delta chunks; emit { type: 'content', data } for text deltas
-  4. On finish_reason === 'tool_calls':
+  1. Instantiate HooksService(workingDirectory)
+  2. Load MCP tools via mcp.service.listAllTools()
+  3. Fire UserPromptSubmit hook; if contextInjection → prepend system message
+  4. Call openai.chat.completions.create({ stream: true, tools, ...request })
+  5. Accumulate delta chunks; emit { type: 'content', data } for text deltas
+  6. On finish_reason === 'tool_calls':
        a. Emit { type: 'tool_call', data: toolCall } for each call
-       b. Call mcp.service.callTool(name, args)
-       c. Emit { type: 'tool_result', data: result }
-       d. Append tool results to messages; go to step 2
-  5. On finish_reason === 'stop': emit { type: 'complete', data: null }
-  6. On error: emit { type: 'error', data: message }
+       b. Fire PreToolUse hook (matcher on tool name)
+          - If decision === 'block': content = '[blocked] reason', skip MCP call
+          - If contextInjection: prepend system message
+       c. Call mcp.service.callTool(name, args)
+       d. Fire PostToolUse hook; if contextInjection → append to tool result
+       e. On callTool error: fire PostToolUseFailure (async); content = 'Error: ...'
+       f. Emit { type: 'tool_result', data: result }
+       g. Append tool results to messages; go to step 4
+  7. On finish_reason === 'stop': emit { type: 'complete', data: null }; fire Stop (async)
+  8. On error: emit { type: 'error', data: message }
 ```
 
 **Loop ceiling:** 20 tool-call rounds max per request.
@@ -332,8 +354,11 @@ Interactive REPL commands:
 | Command | Description |
 |---------|-------------|
 | `.session` | Print session stats |
-| `.clear` | Clear session messages |
+| `.clear` | Clear session messages and skill injections |
 | `.tools` | Show tool call history |
+| `.skills` | List discovered skills (name + description) |
+| `.hooks` | Show active hook configuration |
+| `/skill-name [args]` | Invoke a skill — renders and injects into context |
 | `exit` / `quit` | Exit |
 
 ### 8.2 `client.ts` — HTTP Streaming Client
@@ -347,13 +372,16 @@ interface StreamCallbacks {
   onError(message: string): void;
 }
 
-async function streamQuery(
-  serverUrl: string,
-  token: string,
-  messages: OpenAI.ChatCompletionMessageParam[],
-  model: string,
-  callbacks: StreamCallbacks
-): Promise<void>
+interface QueryOptions {
+  serverUrl: string;
+  token: string;
+  messages: OpenAI.ChatCompletionMessageParam[];
+  model: string;
+  callbacks: StreamCallbacks;
+  workingDirectory?: string;  // forwarded to server for hook context
+}
+
+async function streamQuery(opts: QueryOptions): Promise<void>
 ```
 
 ### 8.3 `display.ts` — Terminal Rendering
@@ -467,10 +495,11 @@ cd mcp/file-editor-mcp-server && npm install && npx tsc
 | `express` | Backend HTTP server |
 | `openai` | LiteLLM proxy client (OpenAI-compatible SDK) |
 | `commander` | CLI argument parsing |
-| `axios` | HTTP streaming client |
+| `axios` | HTTP streaming client + hook HTTP handler |
 | `chalk` | Coloured terminal output |
 | `ora` | Loading spinner |
 | `uuid` | Session ID generation |
+| `js-yaml` | SKILL.md frontmatter parsing |
 
 ### Dev (root package)
 
@@ -480,6 +509,7 @@ cd mcp/file-editor-mcp-server && npm install && npx tsc
 | `@types/node` | Node type definitions |
 | `@types/express` | Express type definitions |
 | `@types/uuid` | uuid type definitions |
+| `@types/js-yaml` | js-yaml type definitions |
 | `eslint` + `@typescript-eslint/*` | Linting |
 
 MCP servers each manage their own dependencies independently.
@@ -545,6 +575,14 @@ All phases are complete. The project is built, tested, and running.
 - Multi-stage `Dockerfile` + `.dockerignore`
 - `config/mcp-servers.json` with `${MCP_ROOT}` references
 - `MODEL` env var for configurable model with sonnet 4.5 fallback
+
+### Phase 5 — Skills, Hooks & User Instructions ✅
+- `src/cli/agents.ts` — loads `~/.tool-kit/AGENTS.md`, `.tool-kit/AGENTS.md`, `.tool-kit/AGENTS.local.md`; injected into every system prompt under `## User Instructions`
+- `src/cli/skills.ts` — three-tier skill discovery; YAML frontmatter parsing; `` !`cmd` ``, `$ARGUMENTS`, `$N`, `${VAR}` substitution; `/skill-name` injection
+- `src/server/hooks.service.ts` — merges three settings.json tiers; fires `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Stop` events; command hooks (spawn + stdin/stdout JSON) and HTTP hooks (axios POST)
+- `src/cli/cli.ts` updated — `/skill-name [args]`, `.skills`, `.hooks` REPL commands; skill injections persisted in session
+- `src/server/ai.service.ts` updated — full hook wiring in agentic loop
+- `.gitignore` updated — `.tool-kit/skills.local/`, `.tool-kit/settings.local.json`, `.tool-kit/AGENTS.local.md`
 
 ---
 

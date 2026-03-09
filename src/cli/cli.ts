@@ -14,6 +14,7 @@ import {
   getApiMessages,
   sessionStats,
   Session,
+  SkillInjection,
 } from './session';
 import { streamQuery, ToolCallChunk, ToolResult } from './client';
 import {
@@ -25,6 +26,9 @@ import {
   printBanner,
   startSpinner,
 } from './display';
+import { loadAgentsInstructions } from './agents';
+import { loadSkills, listSkills, renderSkill } from './skills';
+import { HooksService } from '../server/hooks.service';
 
 const DEFAULT_SERVER = 'http://localhost:3333';
 const DEFAULT_MODEL = process.env.MODEL ?? 'anthropic.claude-4.5-sonnet';
@@ -56,6 +60,12 @@ function buildSystemPrompt(cwd: string, session: Session): string {
     lines.push('', `## Session`, `${session.messages.length} messages, ${session.toolCalls.length} tool calls today`);
   }
   lines.push('', '## Instructions', 'Use tools to complete tasks. Be concise and direct in responses.', `Always pass cwd: "${cwd}" when invoking bash tools so commands run in the correct working directory.`);
+
+  const agentsBlock = loadAgentsInstructions(cwd);
+  if (agentsBlock) {
+    lines.push('', '## User Instructions', agentsBlock);
+  }
+
   return lines.join('\n');
 }
 
@@ -71,9 +81,15 @@ async function runQuery(
 
   const messages: OpenAI.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },
-    ...getApiMessages(session),
-    { role: 'user', content: query },
   ];
+
+  // Prepend skill injections as system messages
+  for (const inj of session.skillInjections) {
+    messages.push({ role: 'system', content: inj.content });
+  }
+
+  messages.push(...getApiMessages(session));
+  messages.push({ role: 'user', content: query });
 
   addMessage(session, 'user', query);
 
@@ -90,6 +106,7 @@ async function runQuery(
       token,
       messages,
       model,
+      workingDirectory: cwd,
       callbacks: {
         onContent(delta) {
           if (!spinnerStopped) {
@@ -144,7 +161,9 @@ async function runQuery(
 async function interactiveMode(serverUrl: string, token: string, model: string, newSession: boolean): Promise<void> {
   const cwd = process.cwd();
   cleanupOldSessions();
-  const session = newSession
+  loadSkills(cwd);
+
+  const session: Session = newSession
     ? {
         sessionId: require('uuid').v4(),
         sessionKey: 'new',
@@ -154,6 +173,7 @@ async function interactiveMode(serverUrl: string, token: string, model: string, 
         messages: [],
         toolCalls: [],
         filesViewed: [],
+        skillInjections: [],
       }
     : loadSession(cwd);
 
@@ -186,6 +206,7 @@ async function interactiveMode(serverUrl: string, token: string, model: string, 
         printInfo(sessionStats(session));
       } else if (input === '.clear') {
         session.messages = [];
+        session.skillInjections = [];
         saveSession(session);
         printInfo('Session messages cleared.');
       } else if (input === '.tools') {
@@ -195,6 +216,45 @@ async function interactiveMode(serverUrl: string, token: string, model: string, 
           for (const tc of session.toolCalls) {
             printInfo(`[${new Date(tc.timestamp).toLocaleTimeString()}] ${tc.tool} → ${tc.resultLength} bytes`);
           }
+        }
+      } else if (input === '.skills') {
+        const skills = listSkills();
+        if (skills.length === 0) {
+          printInfo('No skills found. Place SKILL.md files in ~/.tool-kit/skills/<name>/ or .tool-kit/skills/<name>/');
+        } else {
+          const maxName = Math.max(...skills.map(s => s.name.length), 4);
+          printInfo('Available skills:');
+          printInfo(`${'NAME'.padEnd(maxName)}  DESCRIPTION`);
+          for (const s of skills) {
+            printInfo(`${s.name.padEnd(maxName)}  ${s.description}`);
+          }
+        }
+      } else if (input === '.hooks') {
+        const hooks = new HooksService(cwd);
+        printInfo('Active hook configuration:\n' + hooks.configSummary());
+      } else if (input.startsWith('/')) {
+        // Skill invocation: /skill-name [args...]
+        const spaceIdx = input.indexOf(' ');
+        const skillName = (spaceIdx === -1 ? input.slice(1) : input.slice(1, spaceIdx)).toLowerCase();
+        const argsStr = spaceIdx === -1 ? '' : input.slice(spaceIdx + 1).trim();
+
+        const rendered = renderSkill(skillName, argsStr, {
+          args: argsStr,
+          sessionId: session.sessionId,
+          cwd,
+        });
+
+        if (!rendered) {
+          printError(`Skill not found: ${skillName}. Type .skills to list available skills.`);
+        } else {
+          const injection: SkillInjection = {
+            name: skillName,
+            content: rendered,
+            injectedAt: new Date().toISOString(),
+          };
+          session.skillInjections.push(injection);
+          saveSession(session);
+          printInfo(`Skill '${skillName}' injected into context.`);
         }
       } else {
         await runQuery(input, session, serverUrl, token, model);
@@ -223,7 +283,9 @@ async function oneShotMode(
 ): Promise<void> {
   const cwd = process.cwd();
   cleanupOldSessions();
-  const session = newSession
+  loadSkills(cwd);
+
+  const session: Session = newSession
     ? {
         sessionId: require('uuid').v4(),
         sessionKey: 'oneshot',
@@ -233,6 +295,7 @@ async function oneShotMode(
         messages: [],
         toolCalls: [],
         filesViewed: [],
+        skillInjections: [],
       }
     : loadSession(cwd);
 

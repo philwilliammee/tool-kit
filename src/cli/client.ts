@@ -27,6 +27,7 @@ export interface QueryOptions {
   messages: OpenAI.ChatCompletionMessageParam[];
   model: string;
   callbacks: StreamCallbacks;
+  workingDirectory?: string;
 }
 
 type StreamChunk =
@@ -37,11 +38,11 @@ type StreamChunk =
   | { type: 'error'; data: string };
 
 export async function streamQuery(opts: QueryOptions): Promise<void> {
-  const { serverUrl, token, messages, model, callbacks } = opts;
+  const { serverUrl, token, messages, model, callbacks, workingDirectory } = opts;
 
   const response = await axios.post(
     `${serverUrl}/api/chat/stream`,
-    { messages, model },
+    { messages, model, workingDirectory },
     {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       responseType: 'stream',

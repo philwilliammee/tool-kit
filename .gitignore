@@ -33,3 +33,8 @@ Thumbs.db
 # Local development files
 .local
 archive
+
+# tool-kit — local/personal overrides (never commit)
+.tool-kit/skills.local/
+.tool-kit/settings.local.json
+.tool-kit/AGENTS.local.md

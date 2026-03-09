@@ -72,8 +72,11 @@ See `.env.example` for a full template.
 | Command | Description |
 |---------|-------------|
 | `.session` | Show session stats (messages, tool calls) |
-| `.clear` | Clear session message history |
+| `.clear` | Clear session message history and skill injections |
 | `.tools` | List tool calls made this session |
+| `.skills` | List available skills (name + description) |
+| `.hooks` | Show active hook configuration |
+| `/skill-name [args]` | Invoke a skill — renders and injects it into context |
 | `exit` / `quit` | Exit |
 
 ## Documentation
@@ -81,6 +84,7 @@ See `.env.example` for a full template.
 | Document | Description |
 |----------|-------------|
 | [docs/spec.md](./docs/spec.md) | Architecture, TypeScript interfaces, API contract, env vars, MCP config |
+| [docs/skills-hooks-spec.md](./docs/skills-hooks-spec.md) | Skills, hooks, and AGENTS.md extensibility reference |
 | [docs/README.md](./docs/README.md) | Docs index |
 
 ## MCP Servers
@@ -98,10 +102,16 @@ See [mcp/README.md](./mcp/README.md) for the protocol reference and instructions
 ```
 tool-kit/
 ├── src/
-│   ├── cli/        # CLI client (commander, axios streaming, session, display)
-│   └── server/     # Express backend (LiteLLM, MCP service, config)
+│   ├── cli/        # CLI client (commander, axios streaming, session, display, skills, agents)
+│   └── server/     # Express backend (LiteLLM, MCP service, hooks, config)
 ├── mcp/            # MCP tool servers (each independently buildable)
 ├── config/         # mcp-servers.json — MCP binary paths, ${VAR} substitution
 ├── dist/           # Compiled output (tsc)
-└── docs/           # Project documentation and spec
+├── docs/           # Project documentation and spec
+└── .tool-kit/      # Project-level customisation (optional, committable)
+    ├── AGENTS.md       # Standing instructions injected into every system prompt
+    ├── settings.json   # Lifecycle hook configuration
+    └── skills/         # Project-scoped skills (<name>/SKILL.md)
 ```
+
+See [docs/skills-hooks-spec.md](./docs/skills-hooks-spec.md) for the full extensibility reference.

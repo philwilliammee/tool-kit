@@ -11,6 +11,7 @@ interface CommandHandlerConfig {
   command: string;
   timeout?: number;
   async?: boolean;
+  once?: boolean;
 }
 
 interface HttpHandlerConfig {
@@ -19,6 +20,7 @@ interface HttpHandlerConfig {
   headers?: Record<string, string>;
   allowedEnvVars?: string[];
   timeout?: number;
+  once?: boolean;
 }
 
 type HandlerConfig = CommandHandlerConfig | HttpHandlerConfig;
@@ -163,11 +165,17 @@ async function runHandler(
   }
 }
 
+function handlerKey(event: string, handler: HandlerConfig): string {
+  const id = handler.type === 'command' ? handler.command : handler.url;
+  return `${event}::${id}`;
+}
+
 // ── Public service class ───────────────────────────────────────────────────────
 
 export class HooksService {
   private settings: HooksSettings;
   private cwd: string;
+  private firedOnce = new Set<string>();
 
   constructor(cwd: string) {
     this.cwd = cwd;
@@ -175,6 +183,58 @@ export class HooksService {
     const project = loadSettings(path.join(cwd, '.tool-kit', 'settings.json'));
     const local = loadSettings(path.join(cwd, '.tool-kit', 'settings.local.json'));
     this.settings = mergeSettings(global, project, local);
+  }
+
+  /**
+   * Register hooks from a skill's frontmatter. Called when a skill is invoked.
+   * Resolves ${TOOL_KIT_SKILL_DIR} in command strings using the skill's directory.
+   */
+  registerSkillHooks(skillDir: string, hooksData: Record<string, unknown>): void {
+    const sub = (s: string) => s.replace(/\$\{TOOL_KIT_SKILL_DIR\}/g, skillDir);
+
+    for (const [event, groups] of Object.entries(hooksData)) {
+      if (!Array.isArray(groups)) continue;
+      const resolved: HookGroup[] = [];
+
+      for (const group of groups) {
+        if (typeof group !== 'object' || group === null) continue;
+        const g = group as Record<string, unknown>;
+        const rawHandlers = Array.isArray(g.hooks) ? g.hooks : [];
+        const handlers: HandlerConfig[] = [];
+
+        for (const h of rawHandlers) {
+          if (typeof h !== 'object' || h === null) continue;
+          const handler = h as Record<string, unknown>;
+          if (handler.type === 'command' && typeof handler.command === 'string') {
+            handlers.push({
+              type: 'command',
+              command: sub(handler.command),
+              timeout: typeof handler.timeout === 'number' ? handler.timeout : undefined,
+              async: handler.async === true,
+              once: handler.once === true,
+            });
+          } else if (handler.type === 'http' && typeof handler.url === 'string') {
+            handlers.push({
+              type: 'http',
+              url: handler.url,
+              headers: typeof handler.headers === 'object' ? handler.headers as Record<string, string> : undefined,
+              allowedEnvVars: Array.isArray(handler.allowedEnvVars) ? handler.allowedEnvVars as string[] : undefined,
+              timeout: typeof handler.timeout === 'number' ? handler.timeout : undefined,
+              once: handler.once === true,
+            });
+          }
+        }
+
+        if (handlers.length > 0) {
+          resolved.push({ matcher: typeof g.matcher === 'string' ? g.matcher : undefined, hooks: handlers });
+        }
+      }
+
+      if (resolved.length > 0) {
+        if (!this.settings.hooks![event]) this.settings.hooks![event] = [];
+        this.settings.hooks![event].push(...resolved);
+      }
+    }
   }
 
   /**
@@ -199,6 +259,13 @@ export class HooksService {
       }
 
       for (const handler of group.hooks ?? []) {
+        // once: skip if this handler has already fired in this request cycle
+        if (handler.once) {
+          const key = handlerKey(event, handler);
+          if (this.firedOnce.has(key)) continue;
+          this.firedOnce.add(key);
+        }
+
         const output = await runHandler(handler, input, this.cwd);
 
         if (output.decision === 'block') {

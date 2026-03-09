@@ -24,6 +24,12 @@ export interface ToolCallRecord {
   resultLength: number;
 }
 
+export interface SkillInjection {
+  name: string;
+  content: string; // fully rendered [skill: name]\n...
+  injectedAt: string;
+}
+
 export interface Session {
   sessionId: string;
   sessionKey: string;
@@ -33,6 +39,7 @@ export interface Session {
   messages: SessionMessage[];
   toolCalls: ToolCallRecord[];
   filesViewed: string[];
+  skillInjections: SkillInjection[];
 }
 
 function sessionKey(cwd: string): string {
@@ -51,7 +58,9 @@ export function loadSession(cwd: string): Session {
   const filePath = sessionPath(key);
   if (fs.existsSync(filePath)) {
     try {
-      return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Session;
+      const saved = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Session;
+      if (!saved.skillInjections) saved.skillInjections = [];
+      return saved;
     } catch { /* fall through to create new */ }
   }
   return {
@@ -63,6 +72,7 @@ export function loadSession(cwd: string): Session {
     messages: [],
     toolCalls: [],
     filesViewed: [],
+    skillInjections: [],
   };
 }
 

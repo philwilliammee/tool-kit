@@ -1,7 +1,9 @@
 import OpenAI from 'openai';
 import { Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { config } from './config';
 import { McpService } from './mcp.service';
+import { HooksService } from './hooks.service';
 
 const MAX_ITERATIONS = 20;
 
@@ -10,6 +12,7 @@ export interface ChatRequest {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  workingDirectory?: string;
 }
 
 type StreamChunk =
@@ -36,13 +39,32 @@ export class AiService {
     const model = req.model ?? 'anthropic.claude-4.5-sonnet';
     const temperature = req.temperature ?? 0.7;
     const maxTokens = req.maxTokens ?? 4096;
+    const cwd = req.workingDirectory ?? process.cwd();
+    const sessionId = uuidv4();
     const messages: OpenAI.ChatCompletionMessageParam[] = [...req.messages];
+
+    const hooks = new HooksService(cwd);
 
     let tools: OpenAI.ChatCompletionTool[] = [];
     try {
       tools = await this.mcp.listAllTools();
     } catch (err) {
       console.error('[ai] Failed to load MCP tools:', (err as Error).message);
+    }
+
+    // Determine user message text for hook input
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+    const userMessage = typeof lastUserMsg?.content === 'string' ? lastUserMsg.content : '';
+
+    // UserPromptSubmit hook
+    const promptHookOut = await hooks.fire('UserPromptSubmit', {
+      event: 'UserPromptSubmit',
+      session_id: sessionId,
+      working_directory: cwd,
+      message: userMessage,
+    });
+    if (promptHookOut.contextInjection) {
+      messages.push({ role: 'system', content: `[hook: UserPromptSubmit] ${promptHookOut.contextInjection}` });
     }
 
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
@@ -87,6 +109,8 @@ export class AiService {
 
       if (finishReason === 'stop' || accumulatedCalls.size === 0) {
         emit(res, { type: 'complete', data: null });
+        // Stop hook — fire async, no awaiting
+        hooks.fire('Stop', { event: 'Stop', session_id: sessionId, working_directory: cwd }).catch(() => {});
         return;
       }
 
@@ -111,11 +135,45 @@ export class AiService {
 
           emit(res, { type: 'tool_call', data: { id: tc.id, name: tc.name, arguments: args } });
 
+          // PreToolUse hook
+          const preOut = await hooks.fire(
+            'PreToolUse',
+            { event: 'PreToolUse', session_id: sessionId, working_directory: cwd, tool_name: tc.name, tool_input: args },
+            tc.name,
+          );
+
           let content: string;
-          try {
-            content = await this.mcp.callTool(tc.name, args);
-          } catch (err) {
-            content = `Error: ${(err as Error).message}`;
+          if (preOut.decision === 'block') {
+            content = `[blocked] ${preOut.reason ?? 'Tool call blocked by hook.'}`;
+          } else {
+            // If PreToolUse injected context, add it before calling the tool
+            if (preOut.contextInjection) {
+              messages.push({ role: 'system', content: `[hook: PreToolUse] ${preOut.contextInjection}` });
+            }
+
+            try {
+              content = await this.mcp.callTool(tc.name, args);
+
+              // PostToolUse hook
+              const postOut = await hooks.fire(
+                'PostToolUse',
+                { event: 'PostToolUse', session_id: sessionId, working_directory: cwd, tool_name: tc.name, tool_input: args, tool_result: content },
+                tc.name,
+              );
+              if (postOut.contextInjection) {
+                content += `\n[hook: PostToolUse] ${postOut.contextInjection}`;
+              }
+            } catch (err) {
+              const errorMsg = (err as Error).message;
+              content = `Error: ${errorMsg}`;
+
+              // PostToolUseFailure hook — fire async
+              hooks.fire(
+                'PostToolUseFailure',
+                { event: 'PostToolUseFailure', session_id: sessionId, working_directory: cwd, tool_name: tc.name, tool_input: args, error: errorMsg },
+                tc.name,
+              ).catch(() => {});
+            }
           }
 
           emit(res, { type: 'tool_result', data: { toolCallId: tc.id, name: tc.name, content } });
@@ -127,5 +185,6 @@ export class AiService {
 
     // Reached iteration ceiling
     emit(res, { type: 'complete', data: null });
+    hooks.fire('Stop', { event: 'Stop', session_id: sessionId, working_directory: cwd }).catch(() => {});
   }
 }

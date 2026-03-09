@@ -6,17 +6,17 @@ The backend connects to any **OpenAI-compatible API** — LiteLLM, OpenAI direct
 
 ## How it compares
 
-| | tool-kit | [Claude Code](https://claude.ai/code) | [OpenClaw](https://openclaw.ai) |
-|---|---|---|---|
-| **Focus** | Developer coding agent | Developer coding agent | Personal automation assistant |
-| **Source** | Open source | Closed source | Open source |
-| **Transport** | HTTP API (CLI is one client) | Tightly coupled CLI | Multi-channel (WhatsApp, Telegram, Discord…) |
-| **Model** | Any OpenAI-compatible API | Claude only | Multiple models with failover |
-| **Tools** | Bash, GitHub, file editing (MCP) | File editing, bash, web search | Browser, email, calendar, shell, plugins |
-| **Hosting** | Self-hosted server + CLI | Managed by Anthropic | Local-first, self-hosted |
-| **Extend** | Add MCP servers | Limited | Community skills / plugins |
+| | tool-kit | [pi-mono](https://github.com/badlogic/pi-mono) |
+|---|---|---|
+| **Focus** | Coding agent for cloud-based dev automation | Full AI agent ecosystem (coding agent + Slack bot + TUI/web UI libs + GPU pod management) |
+| **Source** | Open source (MIT) | Open source (MIT) |
+| **Transport** | HTTP API — any client (CLI, CI script, web UI) drives the same backend | Tightly coupled CLI per package |
+| **Model** | Any OpenAI-compatible endpoint (`OPENAI_BASE_URL`) | Unified multi-provider API (`pi-ai`: OpenAI, Anthropic, Google) |
+| **Tools** | Bash, GitHub (octokit), file editing via MCP | Coding agent CLI, Slack delegation bot, vLLM pod management |
+| **Hosting** | Single deployable server + thin CLI client | Library packages, local-first |
+| **Extend** | Add MCP servers (standard protocol) | Add NPM packages |
 
-**tool-kit** is a super lightweight agent designed to run in a cloud environment: open source and self-hosted like OpenClaw, but narrowly focused on automated software development like Claude Code. Its built-in bash, file-editor, and GitHub tools give the agent everything it needs to read code, open pull requests, run commands, and edit files — all from a single deployable server. The HTTP API boundary means any client — CLI, web UI, CI script — can drive the same backend.
+**tool-kit** does one thing: give a cloud-hosted coding agent reliable tools to read code, run commands, edit files, and open pull requests. Where pi-mono is a full ecosystem spanning Slack bots, TUI/web UI libraries, and GPU pod management, tool-kit stays narrowly focused so you can deploy a single Express server and drive it from any client — CLI, CI pipeline, or web UI — over a plain HTTP streaming API. Extension is via MCP servers rather than custom NPM packages, so any MCP-compatible tool drops straight in.
 
 ```
 CLI  ──POST /api/chat/stream──▶  Express backend  ──▶  OpenAI-compatible API
@@ -72,8 +72,11 @@ See `.env.example` for a full template.
 | Command | Description |
 |---------|-------------|
 | `.session` | Show session stats (messages, tool calls) |
-| `.clear` | Clear session message history |
+| `.clear` | Clear session message history and skill injections |
 | `.tools` | List tool calls made this session |
+| `.skills` | List available skills (name + description) |
+| `.hooks` | Show active hook configuration |
+| `/skill-name [args]` | Invoke a skill — renders and injects it into context |
 | `exit` / `quit` | Exit |
 
 ## Documentation
@@ -81,6 +84,7 @@ See `.env.example` for a full template.
 | Document | Description |
 |----------|-------------|
 | [docs/spec.md](./docs/spec.md) | Architecture, TypeScript interfaces, API contract, env vars, MCP config |
+| [docs/skills-hooks-spec.md](./docs/skills-hooks-spec.md) | Skills, hooks, and AGENTS.md extensibility reference |
 | [docs/README.md](./docs/README.md) | Docs index |
 
 ## MCP Servers
@@ -98,10 +102,16 @@ See [mcp/README.md](./mcp/README.md) for the protocol reference and instructions
 ```
 tool-kit/
 ├── src/
-│   ├── cli/        # CLI client (commander, axios streaming, session, display)
-│   └── server/     # Express backend (LiteLLM, MCP service, config)
+│   ├── cli/        # CLI client (commander, axios streaming, session, display, skills, agents)
+│   └── server/     # Express backend (LiteLLM, MCP service, hooks, config)
 ├── mcp/            # MCP tool servers (each independently buildable)
 ├── config/         # mcp-servers.json — MCP binary paths, ${VAR} substitution
 ├── dist/           # Compiled output (tsc)
-└── docs/           # Project documentation and spec
+├── docs/           # Project documentation and spec
+└── .tool-kit/      # Project-level customisation (optional, committable)
+    ├── AGENTS.md       # Standing instructions injected into every system prompt
+    ├── settings.json   # Lifecycle hook configuration
+    └── skills/         # Project-scoped skills (<name>/SKILL.md)
 ```
+
+See [docs/skills-hooks-spec.md](./docs/skills-hooks-spec.md) for the full extensibility reference.

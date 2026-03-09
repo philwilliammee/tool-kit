@@ -50,8 +50,14 @@ npm run start
 # 6. In a second terminal — one-shot query
 node --env-file=.env dist/cli/cli.js "what branch am I on?"
 
+# Pre-inject a skill before the query
+node --env-file=.env dist/cli/cli.js --skill my-skill "run the deploy checklist"
+
 # 7. Or launch the interactive REPL
 node --env-file=.env dist/cli/cli.js
+
+# REPL with a skill pre-loaded
+node --env-file=.env dist/cli/cli.js --skill my-skill
 ```
 
 ## Environment variables

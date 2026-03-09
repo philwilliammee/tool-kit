@@ -584,6 +584,14 @@ All phases are complete. The project is built, tested, and running.
 - `src/server/ai.service.ts` updated — full hook wiring in agentic loop
 - `.gitignore` updated — `.tool-kit/skills.local/`, `.tool-kit/settings.local.json`, `.tool-kit/AGENTS.local.md`
 
+### Phase 6 — Skill Auto-Invocation, SessionStart Hook, `once` Flag, `--skill` Flag ✅
+
+- `src/server/skills.service.ts` — new class-based server-side skill loading; mirrors CLI `skills.ts` but instantiated per request from `workingDirectory`
+- `src/server/ai.service.ts` updated — `SkillsService` + `Skill` LLM function tool; LLM can auto-invoke skills; emits `skill_invoke` stream chunk; fires `SessionStart` hook on first query
+- `src/server/hooks.service.ts` updated — `once` flag per handler (deduped within a request cycle); `registerSkillHooks()` activates skill-scoped frontmatter hooks on invocation
+- `src/cli/client.ts` updated — `skill_invoke` stream chunk type; `isNewSession` + `sessionId` sent in every request; optional `onSkillInvoke` callback
+- `src/cli/cli.ts` updated — `onSkillInvoke` callback persists auto-invoked skills to session; `isFirstQuery` tracking; `--skill <name>` flag pre-injects a skill in one-shot and interactive modes
+
 ---
 
 ## 15. Non-Goals (initial implementation)

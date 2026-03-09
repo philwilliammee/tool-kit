@@ -75,6 +75,7 @@ async function runQuery(
   serverUrl: string,
   token: string,
   model: string,
+  isNewSession: boolean,
 ): Promise<void> {
   const cwd = process.cwd();
   const systemPrompt = buildSystemPrompt(cwd, session);
@@ -107,6 +108,8 @@ async function runQuery(
       messages,
       model,
       workingDirectory: cwd,
+      isNewSession,
+      sessionId: session.sessionId,
       callbacks: {
         onContent(delta) {
           if (!spinnerStopped) {
@@ -130,6 +133,16 @@ async function runQuery(
             pendingCalls.delete(result.toolCallId);
             addToolCall(session, result.name, call.arguments, result.content);
           }
+        },
+        onSkillInvoke(name, content) {
+          const injection: SkillInjection = {
+            name,
+            content,
+            injectedAt: new Date().toISOString(),
+          };
+          session.skillInjections.push(injection);
+          saveSession(session);
+          printInfo(`Skill '${name}' auto-invoked and injected into context.`);
         },
         onComplete() {
           if (!spinnerStopped) {
@@ -158,7 +171,7 @@ async function runQuery(
   saveSession(session);
 }
 
-async function interactiveMode(serverUrl: string, token: string, model: string, newSession: boolean): Promise<void> {
+async function interactiveMode(serverUrl: string, token: string, model: string, newSession: boolean, skillName?: string): Promise<void> {
   const cwd = process.cwd();
   cleanupOldSessions();
   loadSkills(cwd);
@@ -176,6 +189,20 @@ async function interactiveMode(serverUrl: string, token: string, model: string, 
         skillInjections: [],
       }
     : loadSession(cwd);
+
+  // Pre-inject --skill if provided
+  if (skillName) {
+    const rendered = renderSkill(skillName, '', { args: '', sessionId: session.sessionId, cwd });
+    if (!rendered) {
+      printError(`Skill not found: ${skillName}`);
+    } else {
+      session.skillInjections.push({ name: skillName, content: rendered, injectedAt: new Date().toISOString() });
+      saveSession(session);
+      printInfo(`Skill '${skillName}' injected into context.`);
+    }
+  }
+
+  let isFirstQuery = true;
 
   printBanner();
 
@@ -257,7 +284,8 @@ async function interactiveMode(serverUrl: string, token: string, model: string, 
           printInfo(`Skill '${skillName}' injected into context.`);
         }
       } else {
-        await runQuery(input, session, serverUrl, token, model);
+        await runQuery(input, session, serverUrl, token, model, isFirstQuery);
+        isFirstQuery = false;
       }
     } catch (err) {
       printError((err as Error).message);
@@ -280,6 +308,7 @@ async function oneShotMode(
   token: string,
   model: string,
   newSession: boolean,
+  skillName?: string,
 ): Promise<void> {
   const cwd = process.cwd();
   cleanupOldSessions();
@@ -299,8 +328,18 @@ async function oneShotMode(
       }
     : loadSession(cwd);
 
+  // Pre-inject --skill if provided
+  if (skillName) {
+    const rendered = renderSkill(skillName, '', { args: '', sessionId: session.sessionId, cwd });
+    if (!rendered) {
+      printError(`Skill not found: ${skillName}`);
+    } else {
+      session.skillInjections.push({ name: skillName, content: rendered, injectedAt: new Date().toISOString() });
+    }
+  }
+
   try {
-    await runQuery(query, session, serverUrl, token, model);
+    await runQuery(query, session, serverUrl, token, model, newSession);
   } catch (err) {
     printError((err as Error).message);
     process.exit(1);
@@ -317,8 +356,9 @@ program
   .option('-t, --token <token>', 'Bearer token', process.env.API_TOKEN ?? '')
   .option('-m, --model <model>', 'LiteLLM model string', DEFAULT_MODEL)
   .option('--new-session', 'Start a fresh session (ignore today\'s saved session)', false)
+  .option('--skill <name>', 'Pre-inject a skill into context before the query')
   .action(async (query: string | undefined, opts) => {
-    const { server, token, model, newSession } = opts;
+    const { server, token, model, newSession, skill } = opts;
 
     if (!token) {
       printError('API_TOKEN is required. Set it in your .env or pass --token.');
@@ -326,9 +366,9 @@ program
     }
 
     if (query) {
-      await oneShotMode(query, server, token, model, newSession);
+      await oneShotMode(query, server, token, model, newSession, skill);
     } else {
-      await interactiveMode(server, token, model, newSession);
+      await interactiveMode(server, token, model, newSession, skill);
     }
   });
 

@@ -37,6 +37,7 @@ export interface QueryOptions {
   workingDirectory?: string;
   isNewSession?: boolean;
   sessionId?: string;
+  signal?: AbortSignal;
 }
 
 type StreamChunk =
@@ -48,7 +49,7 @@ type StreamChunk =
   | { type: 'error'; data: string };
 
 export async function streamQuery(opts: QueryOptions): Promise<void> {
-  const { serverUrl, token, messages, model, callbacks, workingDirectory, isNewSession, sessionId } = opts;
+  const { serverUrl, token, messages, model, callbacks, workingDirectory, isNewSession, sessionId, signal } = opts;
 
   const response = await axios.post(
     `${serverUrl}/api/chat/stream`,
@@ -57,6 +58,7 @@ export async function streamQuery(opts: QueryOptions): Promise<void> {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       responseType: 'stream',
       timeout: 0,
+      signal,
     },
   );
 

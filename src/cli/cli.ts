@@ -333,6 +333,8 @@ async function interactiveMode(
           ];
           let summary = '';
           let compactFailed = false;
+          const compactAbort = new AbortController();
+          const compactTimeout = setTimeout(() => compactAbort.abort(), 90_000);
           try {
             await streamQuery({
               serverUrl,
@@ -342,18 +344,22 @@ async function interactiveMode(
               workingDirectory: cwd,
               isNewSession: true,
               sessionId: session.sessionId,
+              signal: compactAbort.signal,
               callbacks: {
                 onContent: d => { summary += d; },
                 onToolCall: () => {},
                 onToolResult: () => {},
                 onComplete: () => {},
-                onError: msg => { throw new Error(msg); },
+                onError: msg => { compactFailed = true; spinner.stop(); printError(`Compact failed: ${msg}`); },
               },
             });
           } catch (err) {
-            spinner.stop();
-            printError(`Compact failed: ${(err as Error).message}`);
             compactFailed = true;
+            spinner.stop();
+            const timedOut = compactAbort.signal.aborted;
+            printError(timedOut ? 'Compact timed out — try again or use .clear to reset the session.' : `Compact failed: ${(err as Error).message}`);
+          } finally {
+            clearTimeout(compactTimeout);
           }
           if (!compactFailed) {
             spinner.stop();

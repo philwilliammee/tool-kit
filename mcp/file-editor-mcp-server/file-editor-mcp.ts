@@ -140,21 +140,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "apply_diff",
-        description: "Apply a previously generated diff to a file",
+        description: "Apply a diff to a file. Always pass diff_content directly (the unified patch string returned by generate_minimal_diff).",
         inputSchema: {
           type: "object",
           properties: {
-            diff_id: {
-              type: "string",
-              description: "Diff ID from generate_minimal_diff"
-            },
             file_path: {
               type: "string",
               description: "Path to the file"
             },
             diff_content: {
               type: "string",
-              description: "Raw diff if not using diff_id"
+              description: "The unified patch string from generate_minimal_diff. Required — always pass this directly."
             },
             create_backup: {
               type: "boolean",
@@ -167,12 +163,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               default: false
             }
           },
-          required: ["file_path"]
+          required: ["file_path", "diff_content"]
         }
       },
       {
         name: "validate_changes",
-        description: "Validate that changes won't break syntax or introduce issues",
+        description: "Validate that changes won't break syntax or introduce issues. Pass new_content with the full resulting file content to validate.",
         inputSchema: {
           type: "object",
           properties: {
@@ -180,13 +176,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "string",
               description: "Path to the file"
             },
-            diff_id: {
-              type: "string",
-              description: "Diff ID from generate_minimal_diff"
-            },
             new_content: {
               type: "string",
-              description: "Full content or diff"
+              description: "The full resulting file content to validate"
             },
             validation_type: {
               type: "string",
@@ -309,7 +301,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "apply_diff": {
         const fileEditor = getFileEditorService();
         const result = await fileEditor.applyDiff({
-          diff_id: args.diff_id as string,
           file_path: args.file_path as string,
           diff_content: args.diff_content as string,
           create_backup: args.create_backup as boolean,
@@ -330,7 +321,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const fileEditor = getFileEditorService();
         const result = await fileEditor.validateChanges({
           file_path: args.file_path as string,
-          diff_id: args.diff_id as string,
           new_content: args.new_content as string,
           validation_type: args.validation_type as any,
           language: args.language as string,

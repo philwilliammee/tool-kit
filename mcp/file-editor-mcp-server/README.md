@@ -29,7 +29,7 @@ Find a function, class, or pattern in a file before editing it.
 | `context_lines` | number | No | Lines of context around match (default: 5) |
 | `include_imports` | boolean | No | Include import block in result |
 
-### `generate_diff`
+### `generate_minimal_diff`
 
 Generate a minimal unified diff between old and new content.
 
@@ -41,7 +41,7 @@ Generate a minimal unified diff between old and new content.
 | `algorithm` | string | No | `unified` (default), `line`, `word`, `character` |
 | `validate_before` | boolean | No | Check the diff is applicable before returning |
 
-Returns a `diff_id` that can be passed directly to `apply_diff`.
+Returns `diff_content` (unified patch string) — pass it directly to `apply_diff`.
 
 ### `apply_diff`
 
@@ -50,20 +50,18 @@ Apply a diff to a file, optionally creating a backup.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `file_path` | string | Yes | Target file |
-| `diff_id` | string | No | ID from `generate_diff` |
-| `diff_content` | string | No | Raw diff content (alternative to `diff_id`) |
+| `diff_content` | string | Yes | Unified patch string from `generate_minimal_diff` |
 | `create_backup` | boolean | No | Save a backup before applying (default: true) |
 | `force` | boolean | No | Apply even if validation warnings exist |
 
-### `validate_change`
+### `validate_changes`
 
 Check a proposed change without applying it.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `file_path` | string | Yes | Target file |
-| `diff_id` | string | No | Diff to validate |
-| `new_content` | string | No | Full new content to validate |
+| `new_content` | string | Yes | Full resulting file content to validate |
 | `validation_type` | string | Yes | `syntax`, `linter`, `tests`, or `all` |
 | `language` | string | No | Language hint for syntax checking |
 
@@ -79,7 +77,7 @@ Apply multiple file operations atomically.
 
 `operation` values: `edit`, `create`, `delete`, `rename`.
 
-### `rollback`
+### `rollback_changes`
 
 Restore files from backups created by `apply_diff` or `batch_edit`.
 
@@ -90,9 +88,9 @@ Restore files from backups created by `apply_diff` or `batch_edit`.
 ## Typical workflow
 
 ```
-search_code_context  →  find the exact lines to change
-generate_diff        →  produce a minimal diff (get diff_id)
-validate_change      →  optional: check syntax/lint before applying
-apply_diff           →  apply with automatic backup
-rollback             →  undo if something went wrong
+search_code_context   →  find the exact lines to change
+generate_minimal_diff →  produce a minimal diff (returns diff_content)
+validate_changes      →  optional: check syntax/lint before applying
+apply_diff            →  apply with automatic backup (pass diff_content directly)
+rollback_changes      →  undo if something went wrong
 ```

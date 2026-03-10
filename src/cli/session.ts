@@ -40,6 +40,7 @@ export interface Session {
   toolCalls: ToolCallRecord[];
   filesViewed: string[];
   skillInjections: SkillInjection[];
+  totalTokens: number;
 }
 
 function sessionKey(cwd: string): string {
@@ -60,6 +61,7 @@ export function loadSession(cwd: string): Session {
     try {
       const saved = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Session;
       if (!saved.skillInjections) saved.skillInjections = [];
+      if (saved.totalTokens === undefined) saved.totalTokens = 0;
       return saved;
     } catch { /* fall through to create new */ }
   }
@@ -73,6 +75,7 @@ export function loadSession(cwd: string): Session {
     toolCalls: [],
     filesViewed: [],
     skillInjections: [],
+    totalTokens: 0,
   };
 }
 
@@ -125,5 +128,6 @@ export function sessionStats(session: Session): string {
     `Messages: ${session.messages.length}`,
     `Tool calls: ${session.toolCalls.length}`,
     `Files viewed: ${session.filesViewed.length}`,
+    `Tokens (last call): ${session.totalTokens.toLocaleString()}`,
   ].join('\n');
 }

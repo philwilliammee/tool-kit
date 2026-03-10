@@ -31,27 +31,17 @@ export class FileEditorService {
    * Apply diff to file
    */
   async applyDiff(params: ApplyDiffParams): Promise<ApplyDiffResponse> {
-    const { diff_id, file_path, diff_content, create_backup = true, force = false } = params;
+    const { file_path, diff_content, create_backup = true, force = false } = params;
 
-    // Get diff content
-    let actualDiff: string;
-    if (diff_id) {
-      const cached = this.diffEngine.getCachedDiff(diff_id);
-      if (!cached) {
-        throw new Error(`Diff ID not found: ${diff_id}`);
-      }
-      actualDiff = cached.diff_content;
-    } else if (diff_content) {
-      actualDiff = diff_content;
-    } else {
-      throw new Error('Either diff_id or diff_content must be provided');
+    if (!diff_content) {
+      throw new Error('diff_content is required');
     }
 
     // Read current file content
     const currentContent = await this.fileOps.readFile(file_path);
 
-    // Apply diff (pass diff_id for metadata lookup)
-    const newContent = this.diffEngine.applyDiffToContent(currentContent, actualDiff, diff_id);
+    // Apply diff
+    const newContent = this.diffEngine.applyDiffToContent(currentContent, diff_content);
 
     // Validate if not forcing
     if (!force) {
@@ -114,23 +104,13 @@ export class FileEditorService {
    * Validate changes
    */
   async validateChanges(params: ValidateChangesParams): Promise<ValidateChangesResponse> {
-    const { file_path, diff_id, new_content, validation_type, language } = params;
+    const { file_path, new_content, validation_type, language } = params;
 
-    let contentToValidate: string;
-
-    if (new_content) {
-      contentToValidate = new_content;
-    } else if (diff_id) {
-      const cached = this.diffEngine.getCachedDiff(diff_id);
-      if (!cached) {
-        throw new Error(`Diff ID not found: ${diff_id}`);
-      }
-      // Read the actual file and apply the diff to get the full result
-      const currentContent = await this.fileOps.readFile(file_path);
-      contentToValidate = this.diffEngine.applyDiffToContent(currentContent, cached.diff_content, diff_id);
-    } else {
-      throw new Error('Either diff_id or new_content must be provided');
+    if (!new_content) {
+      throw new Error('new_content is required');
     }
+
+    const contentToValidate: string = new_content;
 
     const results: ValidateChangesResponse = {
       valid: true,

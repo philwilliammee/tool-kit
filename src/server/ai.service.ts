@@ -23,7 +23,7 @@ type StreamChunk =
   | { type: 'tool_call'; data: { id: string; name: string; arguments: Record<string, unknown> } }
   | { type: 'tool_result'; data: { toolCallId: string; name: string; content: string } }
   | { type: 'skill_invoke'; data: { name: string; content: string } }
-  | { type: 'complete'; data: null }
+  | { type: 'complete'; data: { promptTokens: number; completionTokens: number; totalTokens: number } | null }
   | { type: 'error'; data: string };
 
 function emit(res: Response, chunk: StreamChunk): void {
@@ -62,6 +62,9 @@ export class AiService {
         }
       }
     }
+
+    let totalPromptTokens = 0;
+    let totalCompletionTokens = 0;
 
     let tools: OpenAI.ChatCompletionTool[] = [];
     try {
@@ -112,11 +115,17 @@ export class AiService {
           messages,
           tools: tools.length > 0 ? tools : undefined,
           stream: true,
+          stream_options: { include_usage: true },
           temperature,
           max_tokens: maxTokens,
         });
 
         for await (const chunk of stream) {
+          if (chunk.usage) {
+            totalPromptTokens += chunk.usage.prompt_tokens ?? 0;
+            totalCompletionTokens += chunk.usage.completion_tokens ?? 0;
+          }
+
           const delta = chunk.choices[0]?.delta;
           const reason = chunk.choices[0]?.finish_reason;
           if (reason) finishReason = reason;
@@ -143,7 +152,10 @@ export class AiService {
       }
 
       if (finishReason === 'stop' || accumulatedCalls.size === 0) {
-        emit(res, { type: 'complete', data: null });
+        const usage = totalPromptTokens > 0 || totalCompletionTokens > 0
+          ? { promptTokens: totalPromptTokens, completionTokens: totalCompletionTokens, totalTokens: totalPromptTokens + totalCompletionTokens }
+          : null;
+        emit(res, { type: 'complete', data: usage });
         hooks.fire('Stop', { event: 'Stop', session_id: sessionId, working_directory: cwd }).catch(() => {});
         return;
       }
@@ -238,7 +250,10 @@ export class AiService {
     }
 
     // Reached iteration ceiling
-    emit(res, { type: 'complete', data: null });
+    const usage = totalPromptTokens > 0 || totalCompletionTokens > 0
+      ? { promptTokens: totalPromptTokens, completionTokens: totalCompletionTokens, totalTokens: totalPromptTokens + totalCompletionTokens }
+      : null;
+    emit(res, { type: 'complete', data: usage });
     hooks.fire('Stop', { event: 'Stop', session_id: sessionId, working_directory: cwd }).catch(() => {});
   }
 }

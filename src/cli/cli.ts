@@ -17,7 +17,7 @@ import {
   Session,
   SkillInjection,
 } from './session';
-import { streamQuery, ToolCallChunk, ToolResult } from './client';
+import { streamQuery, ToolCallChunk, ToolResult, UsageInfo } from './client';
 import {
   printContent,
   printNewline,
@@ -52,6 +52,17 @@ function getBashHistory(lines: number): string[] {
   } catch {
     return [];
   }
+}
+
+function formatTokens(n: number): string {
+  if (n === 0) return '';
+  return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
+}
+
+function buildPrompt(session: Session): string {
+  const t = formatTokens(session.totalTokens);
+  const prefix = t ? `\x1b[2m[${t}]\x1b[0m ` : '';
+  return `${prefix}\x1b[36m❯\x1b[0m `;
 }
 
 function buildSystemPrompt(cwd: string, session: Session, historyLines: string[] = []): string {
@@ -159,7 +170,8 @@ async function runQuery(
           saveSession(session);
           printInfo(`Skill '${name}' auto-invoked and injected into context.`);
         },
-        onComplete() {
+        onComplete(usage: UsageInfo | null) {
+          if (usage) session.totalTokens = usage.totalTokens;
           if (!spinnerStopped) {
             spinner.stop();
             spinnerStopped = true;
@@ -210,6 +222,7 @@ async function interactiveMode(
         toolCalls: [],
         filesViewed: [],
         skillInjections: [],
+        totalTokens: 0,
       }
     : loadSession(cwd);
 
@@ -239,7 +252,7 @@ async function interactiveMode(
   const keepAlive = setInterval(() => {}, 60 * 60 * 1000);
   rl.on('close', () => clearInterval(keepAlive));
 
-  rl.setPrompt('\x1b[36m❯\x1b[0m ');
+  rl.setPrompt(buildPrompt(session));
   rl.prompt();
 
   rl.on('line', async (line) => {
@@ -303,6 +316,57 @@ async function interactiveMode(
             printError(`Failed to open file: ${(e as Error).message}`);
           }
         }
+      } else if (input === '/compact') {
+        const msgCount = session.messages.length;
+        if (msgCount === 0) {
+          printInfo('Nothing to compact — session is empty.');
+        } else {
+          const spinner = startSpinner(`Compacting ${msgCount} messages…`);
+          const conversationText = session.messages
+            .map(m => `${m.role.toUpperCase()}: ${m.content}`)
+            .join('\n\n---\n\n');
+          const compactMessages: OpenAI.ChatCompletionMessageParam[] = [
+            {
+              role: 'user',
+              content: `Summarize the following conversation into a concise but complete context brief. Preserve all important decisions, findings, code changes, file paths, and open questions. Write it as a first-person assistant context note.\n\n${conversationText}`,
+            },
+          ];
+          let summary = '';
+          let compactFailed = false;
+          try {
+            await streamQuery({
+              serverUrl,
+              token,
+              model,
+              messages: compactMessages,
+              workingDirectory: cwd,
+              isNewSession: true,
+              sessionId: session.sessionId,
+              callbacks: {
+                onContent: d => { summary += d; },
+                onToolCall: () => {},
+                onToolResult: () => {},
+                onComplete: () => {},
+                onError: msg => { throw new Error(msg); },
+              },
+            });
+          } catch (err) {
+            spinner.stop();
+            printError(`Compact failed: ${(err as Error).message}`);
+            compactFailed = true;
+          }
+          if (!compactFailed) {
+            spinner.stop();
+            session.messages = [{
+              timestamp: new Date().toISOString(),
+              role: 'assistant',
+              content: `[Compacted from ${msgCount} messages]\n\n${summary}`,
+            }];
+            session.totalTokens = 0;
+            saveSession(session);
+            printInfo(`Compacted ${msgCount} messages → 1 summary. Context reset.`);
+          }
+        }
       } else if (input.startsWith('/')) {
         // Skill invocation: /skill-name [args...]
         const spaceIdx = input.indexOf(' ');
@@ -336,10 +400,11 @@ async function interactiveMode(
     }
 
     rl.resume();
+    rl.setPrompt(buildPrompt(session));
     rl.prompt();
   });
 
-  rl.on('SIGINT', () => rl.prompt());
+  rl.on('SIGINT', () => { rl.setPrompt(buildPrompt(session)); rl.prompt(); });
 
   // Wait until the interface is explicitly closed (exit/quit or Ctrl+D)
   await new Promise<void>(resolve => rl.once('close', resolve));
@@ -371,6 +436,7 @@ async function oneShotMode(
         toolCalls: [],
         filesViewed: [],
         skillInjections: [],
+        totalTokens: 0,
       }
     : loadSession(cwd);
 

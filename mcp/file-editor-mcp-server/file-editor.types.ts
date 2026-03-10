@@ -69,9 +69,8 @@ export interface GenerateMinimalDiffResponse {
 }
 
 export interface ApplyDiffParams {
-  diff_id?: string;
   file_path: string;
-  diff_content?: string;
+  diff_content: string;
   create_backup?: boolean;
   force?: boolean;
 }
@@ -92,8 +91,7 @@ export interface ApplyDiffResponse {
 
 export interface ValidateChangesParams {
   file_path: string;
-  diff_id?: string;
-  new_content?: string;
+  new_content: string;
   validation_type: ValidationType;
   language?: string;
 }

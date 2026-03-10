@@ -19,6 +19,16 @@ for dir in bash-server octokit-mcp-server file-editor-mcp-server; do
 done
 ```
 
+## Troubleshooting
+
+**`MCP process exited with code 1 before responding`** — `node_modules` are missing in that server's directory. Fix:
+
+```bash
+cd mcp/<server-name> && npm install
+```
+
+No server restart required — servers are spawned fresh per tool call.
+
 ## Adding a new server
 
 1. Create a directory under `mcp/`

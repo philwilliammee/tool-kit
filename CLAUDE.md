@@ -26,6 +26,21 @@ There is no test framework configured yet.
 
 Prettier is configured (`.prettierc`): single quotes, trailing commas, 150-char print width, 2-space indent. TypeScript compiles to CommonJS ES6 targeting `dist/`.
 
+### Environment Variables
+
+Never use fallback values for required environment variables. Assert the variable is set and throw a clear error if not:
+
+```ts
+// ✅ correct
+const BASE_URL = process.env.OPENAI_BASE_URL;
+if (!BASE_URL) throw new Error('OPENAI_BASE_URL environment variable is required');
+
+// ❌ wrong — hides misconfiguration with a silent default
+const BASE_URL = process.env.OPENAI_BASE_URL || 'http://localhost:11434';
+```
+
+This applies to all MCP servers, the CLI, and the backend server. Fail fast with a clear message rather than silently running against the wrong endpoint.
+
 ## Project Purpose
 
 This workspace is a **CLI AI agent** with two operating modes — interactive developer REPL and one-shot query — backed by a LiteLLM proxy and MCP servers over stdio.

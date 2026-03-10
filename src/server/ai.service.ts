@@ -6,7 +6,7 @@ import { McpService } from './mcp.service';
 import { HooksService } from './hooks.service';
 import { SkillsService } from './skills.service';
 
-const MAX_ITERATIONS = 20;
+const MAX_ITERATIONS = 50;
 
 export interface ChatRequest {
   messages: OpenAI.ChatCompletionMessageParam[];

@@ -73,6 +73,8 @@ node --env-file=.env dist/cli/cli.js --skill my-skill
 
 See `.env.example` for a full template.
 
+> **Troubleshooting MCP servers**: if the server logs `MCP process exited with code 1 before responding`, the MCP server's `node_modules` are missing. Run `npm install` inside the failing server's directory (e.g. `cd mcp/bash-server && npm install`).
+
 ## Interactive REPL commands
 
 | Command | Description |
@@ -82,6 +84,7 @@ See `.env.example` for a full template.
 | `.tools` | List tool calls made this session |
 | `.skills` | List available skills (name + description) |
 | `.hooks` | Show active hook configuration |
+| `.open <path>` | Print a file inline (relative or absolute path) |
 | `/skill-name [args]` | Invoke a skill — renders and injects it into context |
 | `exit` / `quit` | Exit |
 

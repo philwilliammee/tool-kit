@@ -2,7 +2,13 @@
 
 /**
  * File Editor MCP Server
- * Provides intelligent file editing capabilities with minimal diff-based operations
+ * Provides stateless file editing capabilities.
+ *
+ * Tools:
+ *   search_code_context — find exact content before editing
+ *   edit_file           — stateless old_string → new_string replacement
+ *   batch_edit          — multi-file atomic operations (edit/create/delete/rename)
+ *   rollback_changes    — restore from backup paths returned by batch_edit
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -14,14 +20,13 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { FileOperationsService } from './file-operations.service.js';
-import { DiffEngineService } from './diff-engine.service.js';
 import { ContextSearchService } from './context-search.service.js';
 import { FileEditorService } from './file-editor.service.js';
 
 const server = new Server(
   {
     name: "file-editor",
-    version: "1.0.0",
+    version: "2.0.0",
   },
   {
     capabilities: {
@@ -32,178 +37,67 @@ const server = new Server(
 
 // Lazy initialization of services
 let fileOps: FileOperationsService | null = null;
-let diffEngine: DiffEngineService | null = null;
 let contextSearch: ContextSearchService | null = null;
 let fileEditor: FileEditorService | null = null;
 
 function getFileOperationsService(): FileOperationsService {
-  if (!fileOps) {
-    fileOps = new FileOperationsService();
-  }
+  if (!fileOps) fileOps = new FileOperationsService();
   return fileOps;
 }
 
-function getDiffEngineService(): DiffEngineService {
-  if (!diffEngine) {
-    diffEngine = new DiffEngineService(getFileOperationsService());
-  }
-  return diffEngine;
-}
-
 function getContextSearchService(): ContextSearchService {
-  if (!contextSearch) {
-    contextSearch = new ContextSearchService(getFileOperationsService());
-  }
+  if (!contextSearch) contextSearch = new ContextSearchService(getFileOperationsService());
   return contextSearch;
 }
 
 function getFileEditorService(): FileEditorService {
-  if (!fileEditor) {
-    fileEditor = new FileEditorService(getFileOperationsService(), getDiffEngineService());
-  }
+  if (!fileEditor) fileEditor = new FileEditorService(getFileOperationsService());
   return fileEditor;
 }
 
-// List available tools
+// ---------------------------------------------------------------------------
+// Tool definitions
+// ---------------------------------------------------------------------------
+
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
         name: "search_code_context",
-        description: "Find relevant code sections before making changes, minimizing what needs to be read",
+        description: "Find relevant code sections before making changes. Use this to get the exact current text before calling edit_file.",
         inputSchema: {
           type: "object",
           properties: {
-            file_path: {
-              type: "string",
-              description: "Absolute or workspace-relative path to the file"
-            },
+            file_path: { type: "string", description: "Absolute or workspace-relative path to the file" },
             search_type: {
               type: "string",
               enum: ["function", "class", "lines", "pattern"],
               description: "Type of search to perform"
             },
-            search_query: {
-              type: "string",
-              description: "Function name, class name, line range (e.g., '10-20'), or regex pattern"
-            },
-            context_lines: {
-              type: "number",
-              description: "Additional lines of context (default: 3)",
-              default: 3
-            },
-            include_imports: {
-              type: "boolean",
-              description: "Include import statements (default: true)",
-              default: true
-            }
+            search_query: { type: "string", description: "Function name, class name, line range (e.g. '10-20'), or regex pattern" },
+            context_lines: { type: "number", description: "Additional context lines (default: 3)", default: 3 },
+            include_imports: { type: "boolean", description: "Include import statements (default: true)", default: true }
           },
           required: ["file_path", "search_type", "search_query"]
         }
       },
       {
-        name: "generate_minimal_diff",
-        description: "Generate the smallest possible diff for a change",
+        name: "edit_file",
+        description: "Replace old_string with new_string in a file. Stateless — no IDs or prior calls needed. The old_string must match exactly (including whitespace). Replaces the first occurrence only. Use search_code_context first if you need to confirm the exact current text.",
         inputSchema: {
           type: "object",
           properties: {
-            file_path: {
-              type: "string",
-              description: "Path to the file to modify"
-            },
-            old_content: {
-              type: "string",
-              description: "The section to replace (must exist in file)"
-            },
-            new_content: {
-              type: "string",
-              description: "The replacement content"
-            },
-            start_line: {
-              type: "number",
-              description: "Optional: hint for faster search (line number)"
-            },
-            algorithm: {
-              type: "string",
-              enum: ["unified", "character", "word", "line"],
-              description: "Diff algorithm to use (default: unified)",
-              default: "unified"
-            },
-            validate_before: {
-              type: "boolean",
-              description: "Dry-run validation (default: true)",
-              default: true
-            }
+            file_path: { type: "string", description: "Absolute path to the file to edit" },
+            old_string: { type: "string", description: "Exact text to find and replace (must exist in file)" },
+            new_string: { type: "string", description: "Replacement text" },
+            create_backup: { type: "boolean", description: "Create a .bak file before editing (default: true)", default: true }
           },
-          required: ["file_path", "old_content", "new_content"]
-        }
-      },
-      {
-        name: "apply_diff",
-        description: "Apply a previously generated diff to a file",
-        inputSchema: {
-          type: "object",
-          properties: {
-            diff_id: {
-              type: "string",
-              description: "Diff ID from generate_minimal_diff"
-            },
-            file_path: {
-              type: "string",
-              description: "Path to the file"
-            },
-            diff_content: {
-              type: "string",
-              description: "Raw diff if not using diff_id"
-            },
-            create_backup: {
-              type: "boolean",
-              description: "Create .bak file (default: true)",
-              default: true
-            },
-            force: {
-              type: "boolean",
-              description: "Apply even with warnings (default: false)",
-              default: false
-            }
-          },
-          required: ["file_path"]
-        }
-      },
-      {
-        name: "validate_changes",
-        description: "Validate that changes won't break syntax or introduce issues",
-        inputSchema: {
-          type: "object",
-          properties: {
-            file_path: {
-              type: "string",
-              description: "Path to the file"
-            },
-            diff_id: {
-              type: "string",
-              description: "Diff ID from generate_minimal_diff"
-            },
-            new_content: {
-              type: "string",
-              description: "Full content or diff"
-            },
-            validation_type: {
-              type: "string",
-              enum: ["syntax", "linter", "tests", "all"],
-              description: "Type of validation to perform"
-            },
-            language: {
-              type: "string",
-              description: "Language for validation (auto-detected if not provided)"
-            }
-          },
-          required: ["file_path", "validation_type"]
+          required: ["file_path", "old_string", "new_string"]
         }
       },
       {
         name: "batch_edit",
-        description: "Apply multiple coordinated edits atomically across files",
+        description: "Apply multiple coordinated operations atomically across files. Supports edit (old_string→new_string), create (new file), delete, and rename. If any operation fails and atomic=true, all changes are rolled back.",
         inputSchema: {
           type: "object",
           properties: {
@@ -213,42 +107,32 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 type: "object",
                 properties: {
                   file_path: { type: "string" },
-                  operation: {
-                    type: "string",
-                    enum: ["edit", "create", "delete", "rename"]
-                  },
-                  diff_content: { type: "string" },
-                  new_path: { type: "string" },
-                  new_content: { type: "string" }
+                  operation: { type: "string", enum: ["edit", "create", "delete", "rename"] },
+                  old_string: { type: "string", description: "For edit: exact text to replace" },
+                  new_string: { type: "string", description: "For edit: replacement text" },
+                  new_path: { type: "string", description: "For rename: destination path" },
+                  new_content: { type: "string", description: "For create: full file content" }
                 },
                 required: ["file_path", "operation"]
               },
               description: "Array of operations to perform"
             },
-            atomic: {
-              type: "boolean",
-              description: "All-or-nothing (default: true)",
-              default: true
-            },
-            validate_all: {
-              type: "boolean",
-              description: "Validate before applying (default: true)",
-              default: true
-            }
+            atomic: { type: "boolean", description: "All-or-nothing (default: true)", default: true },
+            validate_all: { type: "boolean", description: "Validate before applying (default: true)", default: true }
           },
           required: ["operations"]
         }
       },
       {
         name: "rollback_changes",
-        description: "Undo changes using backup file paths",
+        description: "Restore files from backup paths returned by batch_edit or edit_file.",
         inputSchema: {
           type: "object",
           properties: {
             backup_paths: {
               type: "array",
               items: { type: "string" },
-              description: "Backup file paths to restore (from batch_edit response)",
+              description: "Backup file paths to restore",
               minItems: 1
             }
           },
@@ -259,188 +143,70 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
-// Handle tool calls
+// ---------------------------------------------------------------------------
+// Tool call handlers
+// ---------------------------------------------------------------------------
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
     switch (name) {
       case "search_code_context": {
-        const contextSearch = getContextSearchService();
-        const result = await contextSearch.searchCodeContext({
+        const result = await getContextSearchService().searchCodeContext({
           file_path: args.file_path as string,
           search_type: args.search_type as any,
           search_query: args.search_query as string,
           context_lines: args.context_lines as number,
           include_imports: args.include_imports as boolean,
         });
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
 
-      case "generate_minimal_diff": {
-        const diffEngine = getDiffEngineService();
-        const result = await diffEngine.generateMinimalDiff({
+      case "edit_file": {
+        const result = await getFileEditorService().editFile({
           file_path: args.file_path as string,
-          old_content: args.old_content as string,
-          new_content: args.new_content as string,
-          start_line: args.start_line as number,
-          algorithm: args.algorithm as any,
-          validate_before: args.validate_before as boolean,
-        });
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "apply_diff": {
-        const fileEditor = getFileEditorService();
-        const result = await fileEditor.applyDiff({
-          diff_id: args.diff_id as string,
-          file_path: args.file_path as string,
-          diff_content: args.diff_content as string,
+          old_string: args.old_string as string,
+          new_string: args.new_string as string,
           create_backup: args.create_backup as boolean,
-          force: args.force as boolean,
         });
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "validate_changes": {
-        const fileEditor = getFileEditorService();
-        const result = await fileEditor.validateChanges({
-          file_path: args.file_path as string,
-          diff_id: args.diff_id as string,
-          new_content: args.new_content as string,
-          validation_type: args.validation_type as any,
-          language: args.language as string,
-        });
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
 
       case "batch_edit": {
-        // Handle operations parameter - might be JSON string or array
         let operations = args.operations;
-
         if (typeof operations === 'string') {
-          try {
-            operations = JSON.parse(operations);
-          } catch (error: any) {
-            throw new McpError(
-              ErrorCode.InvalidParams,
-              `Invalid operations parameter: must be a valid JSON array. Error: ${error.message}`
-            );
+          try { operations = JSON.parse(operations); }
+          catch (error: any) {
+            throw new McpError(ErrorCode.InvalidParams, `Invalid operations JSON: ${error.message}`);
           }
         }
-
-        if (!Array.isArray(operations)) {
-          throw new McpError(
-            ErrorCode.InvalidParams,
-            `Operations must be an array. Received: ${typeof operations}`
-          );
+        if (!Array.isArray(operations) || operations.length === 0) {
+          throw new McpError(ErrorCode.InvalidParams, 'operations must be a non-empty array');
         }
-
-        if (operations.length === 0) {
-          throw new McpError(
-            ErrorCode.InvalidParams,
-            'Operations array cannot be empty'
-          );
-        }
-
-        const fileEditor = getFileEditorService();
-        const result = await fileEditor.batchEdit({
+        const result = await getFileEditorService().batchEdit({
           operations: operations as any,
           atomic: args.atomic as boolean,
           validate_all: args.validate_all as boolean,
         });
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
 
       case "rollback_changes": {
-        // Handle backup_paths parameter - might be JSON string or array
         let backup_paths = args.backup_paths;
-
-        if (!backup_paths) {
-          throw new McpError(
-            ErrorCode.InvalidParams,
-            'backup_paths is required'
-          );
-        }
-
         if (typeof backup_paths === 'string') {
-          try {
-            backup_paths = JSON.parse(backup_paths);
-          } catch (error: any) {
-            throw new McpError(
-              ErrorCode.InvalidParams,
-              `Invalid backup_paths parameter: must be a valid JSON array. Error: ${error.message}`
-            );
+          try { backup_paths = JSON.parse(backup_paths); }
+          catch (error: any) {
+            throw new McpError(ErrorCode.InvalidParams, `Invalid backup_paths JSON: ${error.message}`);
           }
         }
-
-        if (!Array.isArray(backup_paths)) {
-          throw new McpError(
-            ErrorCode.InvalidParams,
-            `backup_paths must be an array. Received: ${typeof backup_paths}`
-          );
+        if (!Array.isArray(backup_paths) || backup_paths.length === 0) {
+          throw new McpError(ErrorCode.InvalidParams, 'backup_paths must be a non-empty array');
         }
-
-        if (backup_paths.length === 0) {
-          throw new McpError(
-            ErrorCode.InvalidParams,
-            'backup_paths array cannot be empty'
-          );
-        }
-
-        const fileEditor = getFileEditorService();
-        const result = await fileEditor.rollbackChanges({
+        const result = await getFileEditorService().rollbackChanges({
           backup_paths: backup_paths as string[],
         });
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
 
       default:
@@ -448,34 +214,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   } catch (error: any) {
     console.error(`Error in file-editor MCP server:`, error);
-
-    // Return user-friendly error message
+    const knownCodes = new Set(['FILE_NOT_FOUND', 'STRING_NOT_FOUND', 'INVALID_PARAMS', 'PATH_NOT_ALLOWED']);
+    const code = error.code === 'ENOENT' ? 'FILE_NOT_FOUND'
+      : knownCodes.has(error.code) ? error.code
+      : 'INTERNAL_ERROR';
     return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            error: {
-              message: error.message || "Internal server error",
-              code: error.code || "INTERNAL_ERROR",
-            },
-          }, null, 2),
-        },
-      ],
+      content: [{ type: "text", text: JSON.stringify({ error: { message: error.message || "Internal server error", code } }, null, 2) }],
       isError: true,
     };
   }
 });
 
-// Start the server
+// ---------------------------------------------------------------------------
+// Start
+// ---------------------------------------------------------------------------
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("File Editor MCP server running on stdio");
+  console.error("File Editor MCP server v2 running on stdio");
 }
 
 main().catch((error) => {
   console.error("Failed to start file-editor MCP server:", error);
   process.exit(1);
 });
-

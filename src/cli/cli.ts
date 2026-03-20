@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import * as readline from 'readline';
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { execSync } from 'child_process';
@@ -16,7 +17,7 @@ import {
   Session,
   SkillInjection,
 } from './session';
-import { streamQuery, ToolCallChunk, ToolResult } from './client';
+import { streamQuery, ToolCallChunk, ToolResult, UsageInfo } from './client';
 import {
   printContent,
   printNewline,
@@ -43,30 +44,52 @@ function gitBranch(): string {
   }
 }
 
-function buildSystemPrompt(cwd: string, session: Session): string {
+function getBashHistory(lines: number): string[] {
+  try {
+    const histFile = path.join(os.homedir(), '.bash_history');
+    const content = fs.readFileSync(histFile, 'utf-8');
+    return content.split('\n').filter(l => l.trim()).slice(-lines);
+  } catch {
+    return [];
+  }
+}
+
+function formatTokens(n: number): string {
+  if (n === 0) return '';
+  return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
+}
+
+function buildPrompt(session: Session): string {
+  const t = formatTokens(session.totalTokens);
+  const prefix = t ? `\x1b[2m[${t}]\x1b[0m ` : '';
+  return `${prefix}\x1b[36m❯\x1b[0m `;
+}
+
+function buildSystemPrompt(cwd: string, session: Session, historyLines: string[] = []): string {
   const branch = gitBranch();
-  const lines = [
-    'You are tool-kit, a CLI AI agent. You have access to bash execution, GitHub API (octokit), and intelligent file editing tools.',
-    '',
-    '## Context',
-    `Working directory: ${cwd}`,
-    `User: ${os.userInfo().username}@${os.hostname()}`,
-    `Date: ${new Date().toLocaleString()}`,
-    `Node: ${process.version}`,
-    `Platform: ${process.platform}`,
-  ];
-  if (branch) lines.push(`Git branch: ${branch}`);
-  if (session.messages.length > 0) {
-    lines.push('', `## Session`, `${session.messages.length} messages, ${session.toolCalls.length} tool calls today`);
-  }
-  lines.push('', '## Instructions', 'Use tools to complete tasks. Be concise and direct in responses.', `Always pass cwd: "${cwd}" when invoking bash tools so commands run in the correct working directory.`);
-
   const agentsBlock = loadAgentsInstructions(cwd);
-  if (agentsBlock) {
-    lines.push('', '## User Instructions', agentsBlock);
-  }
 
-  return lines.join('\n');
+  return `You are tool-kit, a CLI AI agent. You have access to bash execution, GitHub API (octokit), and intelligent file editing tools.
+
+## Context
+Working directory: ${cwd}
+User: ${os.userInfo().username}@${os.hostname()}
+Date: ${new Date().toLocaleString()}
+Node: ${process.version}
+Platform: ${process.platform}${branch ? `\nGit branch: ${branch}` : ''}${session.messages.length > 0 ? `\n\n## Session\n${session.messages.length} messages, ${session.toolCalls.length} tool calls today` : ''}${historyLines.length > 0 ? `\n\n## Recent Terminal History\n\`\`\`\n${historyLines.join('\n')}\n\`\`\`` : ''}
+
+## Instructions
+Use tools to complete tasks. Be concise and direct in responses.
+Always pass cwd: "${cwd}" when invoking bash tools so commands run in the correct working directory.
+
+## Tool Use — Critical Rules
+- Your available tools are provided to you directly. NEVER search for tool configurations, read config files, or inspect the filesystem to discover what tools exist.
+- When asked to call a specific tool by name, call it immediately. Do not search for it first.
+- NEVER fabricate tool results, file contents, command output, or API responses. If you need information, use a tool to get it.
+- If a tool call fails or returns an error, report the actual error. Do not invent a plausible-sounding result.
+- If a requested tool is not in your tool list, say so clearly. Do not attempt workarounds or pretend the call succeeded.
+- If you are unsure what a tool will return, call it and find out. Do not guess.
+- Only report what tools actually return. Never summarise, paraphrase, or extend tool output with invented content.${agentsBlock ? `\n\n## User Instructions\n${agentsBlock}` : ''}`;
 }
 
 async function runQuery(
@@ -76,9 +99,12 @@ async function runQuery(
   token: string,
   model: string,
   isNewSession: boolean,
+  contextLines: number,
+  includeHistory: boolean,
 ): Promise<void> {
   const cwd = process.cwd();
-  const systemPrompt = buildSystemPrompt(cwd, session);
+  const historyLines = includeHistory ? getBashHistory(contextLines) : [];
+  const systemPrompt = buildSystemPrompt(cwd, session, historyLines);
 
   const messages: OpenAI.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },
@@ -144,7 +170,8 @@ async function runQuery(
           saveSession(session);
           printInfo(`Skill '${name}' auto-invoked and injected into context.`);
         },
-        onComplete() {
+        onComplete(usage: UsageInfo | null) {
+          if (usage) session.totalTokens = usage.totalTokens;
           if (!spinnerStopped) {
             spinner.stop();
             spinnerStopped = true;
@@ -171,7 +198,15 @@ async function runQuery(
   saveSession(session);
 }
 
-async function interactiveMode(serverUrl: string, token: string, model: string, newSession: boolean, skillName?: string): Promise<void> {
+async function interactiveMode(
+  serverUrl: string,
+  token: string,
+  model: string,
+  newSession: boolean,
+  contextLines: number,
+  includeHistory: boolean,
+  skillName?: string,
+): Promise<void> {
   const cwd = process.cwd();
   cleanupOldSessions();
   loadSkills(cwd);
@@ -187,6 +222,7 @@ async function interactiveMode(serverUrl: string, token: string, model: string, 
         toolCalls: [],
         filesViewed: [],
         skillInjections: [],
+        totalTokens: 0,
       }
     : loadSession(cwd);
 
@@ -216,7 +252,7 @@ async function interactiveMode(serverUrl: string, token: string, model: string, 
   const keepAlive = setInterval(() => {}, 60 * 60 * 1000);
   rl.on('close', () => clearInterval(keepAlive));
 
-  rl.setPrompt('\x1b[36m❯\x1b[0m ');
+  rl.setPrompt(buildPrompt(session));
   rl.prompt();
 
   rl.on('line', async (line) => {
@@ -259,6 +295,84 @@ async function interactiveMode(serverUrl: string, token: string, model: string, 
       } else if (input === '.hooks') {
         const hooks = new HooksService(cwd);
         printInfo('Active hook configuration:\n' + hooks.configSummary());
+      } else if (input.startsWith('.open ')) {
+        // Inline file viewer: .open <path>
+        const fileArg = input.slice(6).trim();
+        const resolved = path.isAbsolute(fileArg) ? fileArg : path.resolve(cwd, fileArg);
+        if (!fs.existsSync(resolved)) {
+          printError(`File not found: ${resolved}`);
+        } else {
+          try {
+            const content = fs.readFileSync(resolved, 'utf-8');
+            printInfo(`--- ${resolved} ---`);
+            process.stdout.write(content);
+            if (!content.endsWith('\n')) process.stdout.write('\n');
+            printInfo('--- end ---');
+            if (!session.filesViewed.includes(resolved)) {
+              session.filesViewed.push(resolved);
+              saveSession(session);
+            }
+          } catch (e) {
+            printError(`Failed to open file: ${(e as Error).message}`);
+          }
+        }
+      } else if (input === '/compact') {
+        const msgCount = session.messages.length;
+        if (msgCount === 0) {
+          printInfo('Nothing to compact — session is empty.');
+        } else {
+          const spinner = startSpinner(`Compacting ${msgCount} messages…`);
+          const conversationText = session.messages
+            .map(m => `${m.role.toUpperCase()}: ${m.content}`)
+            .join('\n\n---\n\n');
+          const compactMessages: OpenAI.ChatCompletionMessageParam[] = [
+            {
+              role: 'user',
+              content: `Summarize the following conversation into a concise but complete context brief. Preserve all important decisions, findings, code changes, file paths, and open questions. Write it as a first-person assistant context note.\n\n${conversationText}`,
+            },
+          ];
+          let summary = '';
+          let compactFailed = false;
+          const compactAbort = new AbortController();
+          const compactTimeout = setTimeout(() => compactAbort.abort(), 90_000);
+          try {
+            await streamQuery({
+              serverUrl,
+              token,
+              model,
+              messages: compactMessages,
+              workingDirectory: cwd,
+              isNewSession: true,
+              sessionId: session.sessionId,
+              signal: compactAbort.signal,
+              callbacks: {
+                onContent: d => { summary += d; },
+                onToolCall: () => {},
+                onToolResult: () => {},
+                onComplete: () => {},
+                onError: msg => { compactFailed = true; spinner.stop(); printError(`Compact failed: ${msg}`); },
+              },
+            });
+          } catch (err) {
+            compactFailed = true;
+            spinner.stop();
+            const timedOut = compactAbort.signal.aborted;
+            printError(timedOut ? 'Compact timed out — try again or use .clear to reset the session.' : `Compact failed: ${(err as Error).message}`);
+          } finally {
+            clearTimeout(compactTimeout);
+          }
+          if (!compactFailed) {
+            spinner.stop();
+            session.messages = [{
+              timestamp: new Date().toISOString(),
+              role: 'assistant',
+              content: `[Compacted from ${msgCount} messages]\n\n${summary}`,
+            }];
+            session.totalTokens = 0;
+            saveSession(session);
+            printInfo(`Compacted ${msgCount} messages → 1 summary. Context reset.`);
+          }
+        }
       } else if (input.startsWith('/')) {
         // Skill invocation: /skill-name [args...]
         const spaceIdx = input.indexOf(' ');
@@ -284,7 +398,7 @@ async function interactiveMode(serverUrl: string, token: string, model: string, 
           printInfo(`Skill '${skillName}' injected into context.`);
         }
       } else {
-        await runQuery(input, session, serverUrl, token, model, isFirstQuery);
+        await runQuery(input, session, serverUrl, token, model, isFirstQuery, contextLines, includeHistory);
         isFirstQuery = false;
       }
     } catch (err) {
@@ -292,10 +406,11 @@ async function interactiveMode(serverUrl: string, token: string, model: string, 
     }
 
     rl.resume();
+    rl.setPrompt(buildPrompt(session));
     rl.prompt();
   });
 
-  rl.on('SIGINT', () => rl.prompt());
+  rl.on('SIGINT', () => { rl.setPrompt(buildPrompt(session)); rl.prompt(); });
 
   // Wait until the interface is explicitly closed (exit/quit or Ctrl+D)
   await new Promise<void>(resolve => rl.once('close', resolve));
@@ -308,6 +423,8 @@ async function oneShotMode(
   token: string,
   model: string,
   newSession: boolean,
+  contextLines: number,
+  includeHistory: boolean,
   skillName?: string,
 ): Promise<void> {
   const cwd = process.cwd();
@@ -325,6 +442,7 @@ async function oneShotMode(
         toolCalls: [],
         filesViewed: [],
         skillInjections: [],
+        totalTokens: 0,
       }
     : loadSession(cwd);
 
@@ -339,7 +457,7 @@ async function oneShotMode(
   }
 
   try {
-    await runQuery(query, session, serverUrl, token, model, newSession);
+    await runQuery(query, session, serverUrl, token, model, newSession, contextLines, includeHistory);
   } catch (err) {
     printError((err as Error).message);
     process.exit(1);
@@ -355,10 +473,13 @@ program
   .option('-s, --server <url>', 'Backend server URL', process.env.TOOL_KIT_SERVER ?? DEFAULT_SERVER)
   .option('-t, --token <token>', 'Bearer token', process.env.API_TOKEN ?? '')
   .option('-m, --model <model>', 'LiteLLM model string', DEFAULT_MODEL)
+  .option('-c, --context <lines>', 'Number of bash history lines to include in context', '10')
+  .option('--no-history', 'Disable bash history injection into context')
   .option('--new-session', 'Start a fresh session (ignore today\'s saved session)', false)
   .option('--skill <name>', 'Pre-inject a skill into context before the query')
   .action(async (query: string | undefined, opts) => {
-    const { server, token, model, newSession, skill } = opts;
+    const { server, token, model, newSession, skill, context, history } = opts;
+    const contextLines = parseInt(context, 10) || 10;
 
     if (!token) {
       printError('API_TOKEN is required. Set it in your .env or pass --token.');
@@ -366,9 +487,9 @@ program
     }
 
     if (query) {
-      await oneShotMode(query, server, token, model, newSession, skill);
+      await oneShotMode(query, server, token, model, newSession, contextLines, history, skill);
     } else {
-      await interactiveMode(server, token, model, newSession, skill);
+      await interactiveMode(server, token, model, newSession, contextLines, history, skill);
     }
   });
 

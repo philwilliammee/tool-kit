@@ -13,12 +13,18 @@ export interface ToolResult {
   content: string;
 }
 
+export interface UsageInfo {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
 export interface StreamCallbacks {
   onContent(delta: string): void;
   onToolCall(chunk: ToolCallChunk): void;
   onToolResult(result: ToolResult): void;
   onSkillInvoke?(name: string, content: string): void;
-  onComplete(): void;
+  onComplete(usage: UsageInfo | null): void;
   onError(message: string): void;
 }
 
@@ -31,6 +37,7 @@ export interface QueryOptions {
   workingDirectory?: string;
   isNewSession?: boolean;
   sessionId?: string;
+  signal?: AbortSignal;
 }
 
 type StreamChunk =
@@ -38,11 +45,11 @@ type StreamChunk =
   | { type: 'tool_call'; data: ToolCallChunk }
   | { type: 'tool_result'; data: ToolResult }
   | { type: 'skill_invoke'; data: { name: string; content: string } }
-  | { type: 'complete'; data: null }
+  | { type: 'complete'; data: UsageInfo | null }
   | { type: 'error'; data: string };
 
 export async function streamQuery(opts: QueryOptions): Promise<void> {
-  const { serverUrl, token, messages, model, callbacks, workingDirectory, isNewSession, sessionId } = opts;
+  const { serverUrl, token, messages, model, callbacks, workingDirectory, isNewSession, sessionId, signal } = opts;
 
   const response = await axios.post(
     `${serverUrl}/api/chat/stream`,
@@ -51,6 +58,7 @@ export async function streamQuery(opts: QueryOptions): Promise<void> {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       responseType: 'stream',
       timeout: 0,
+      signal,
     },
   );
 
@@ -80,7 +88,7 @@ export async function streamQuery(opts: QueryOptions): Promise<void> {
               callbacks.onSkillInvoke?.(parsed.data.name, parsed.data.content);
               break;
             case 'complete':
-              callbacks.onComplete();
+              callbacks.onComplete(parsed.data);
               resolve();
               break;
             case 'error':

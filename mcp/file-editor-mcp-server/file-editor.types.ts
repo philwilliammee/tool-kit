@@ -126,10 +126,26 @@ export interface ValidateChangesResponse {
   recommendations: string[];
 }
 
+export interface EditFileParams {
+  file_path: string;
+  old_string: string;
+  new_string: string;
+  create_backup?: boolean;
+}
+
+export interface EditFileResponse {
+  success: boolean;
+  file_path: string;
+  backup_path?: string;
+}
+
 export interface BatchEditOperation {
   file_path: string;
   operation: OperationType;
-  diff_content?: string;
+  /** For edit operations: the exact text to replace */
+  old_string?: string;
+  /** For edit operations: the replacement text */
+  new_string?: string;
   new_path?: string;
   new_content?: string;
 }

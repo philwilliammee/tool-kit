@@ -5,6 +5,10 @@
       "path": "./",
     },
     {
+      "name": "ssit-terminal-ai",
+      "path": "../../../ssit/ssit-terminal-ai",
+    },
+    {
       "name": "mcp: bash-server",
       "path": "./mcp/bash-server",
     },

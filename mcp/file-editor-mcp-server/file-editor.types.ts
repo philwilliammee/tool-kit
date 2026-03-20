@@ -69,8 +69,9 @@ export interface GenerateMinimalDiffResponse {
 }
 
 export interface ApplyDiffParams {
+  diff_id?: string;
   file_path: string;
-  diff_content: string;
+  diff_content?: string;
   create_backup?: boolean;
   force?: boolean;
 }
@@ -91,7 +92,8 @@ export interface ApplyDiffResponse {
 
 export interface ValidateChangesParams {
   file_path: string;
-  new_content: string;
+  diff_id?: string;
+  new_content?: string;
   validation_type: ValidationType;
   language?: string;
 }
@@ -124,10 +126,26 @@ export interface ValidateChangesResponse {
   recommendations: string[];
 }
 
+export interface EditFileParams {
+  file_path: string;
+  old_string: string;
+  new_string: string;
+  create_backup?: boolean;
+}
+
+export interface EditFileResponse {
+  success: boolean;
+  file_path: string;
+  backup_path?: string;
+}
+
 export interface BatchEditOperation {
   file_path: string;
   operation: OperationType;
-  diff_content?: string;
+  /** For edit operations: the exact text to replace */
+  old_string?: string;
+  /** For edit operations: the replacement text */
+  new_string?: string;
   new_path?: string;
   new_content?: string;
 }

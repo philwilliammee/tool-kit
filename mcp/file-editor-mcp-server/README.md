@@ -1,6 +1,6 @@
 # file-editor-mcp-server
 
-MCP server for intelligent file editing. Instead of reading and rewriting whole files, it works with minimal diffs — search for context, generate a diff, validate it, and apply it. Backups are created automatically; changes can be rolled back.
+MCP server for stateless file editing. Uses direct string replacement — no diff IDs, no session state. Safe across MCP server restarts.
 
 ## Build
 
@@ -13,84 +13,57 @@ npm run build
 |----------|----------|-------------|
 | `WORKSPACE_ROOT` | No | Root path the server is allowed to access (default: `$HOME`) |
 
-Set `WORKSPACE_ROOT` to restrict file access to a specific directory tree. When used via tool-kit, this is passed automatically from `config/mcp-servers.json`.
-
 ## Tools
 
 ### `search_code_context`
 
-Find a function, class, or pattern in a file before editing it.
+Find exact current content in a file before editing.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `file_path` | string | Yes | Absolute or relative path to the file |
 | `search_type` | string | Yes | `function`, `class`, `lines`, or `pattern` |
 | `search_query` | string | Yes | Name, line range (e.g. `10-25`), or regex pattern |
-| `context_lines` | number | No | Lines of context around match (default: 5) |
+| `context_lines` | number | No | Lines of context around match (default: 3) |
 | `include_imports` | boolean | No | Include import block in result |
 
-### `generate_minimal_diff`
+### `edit_file`
 
-Generate a minimal unified diff between old and new content.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `file_path` | string | Yes | Target file |
-| `old_content` | string | Yes | Current content of the section |
-| `new_content` | string | Yes | Replacement content |
-| `algorithm` | string | No | `unified` (default), `line`, `word`, `character` |
-| `validate_before` | boolean | No | Check the diff is applicable before returning |
-
-Returns `diff_content` (unified patch string) — pass it directly to `apply_diff`.
-
-### `apply_diff`
-
-Apply a diff to a file, optionally creating a backup.
+Stateless string-replacement edit. Finds `old_string` in the file and replaces it with `new_string`. Replaces the first occurrence only. No IDs or prior calls needed.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `file_path` | string | Yes | Target file |
-| `diff_content` | string | Yes | Unified patch string from `generate_minimal_diff` |
-| `create_backup` | boolean | No | Save a backup before applying (default: true) |
-| `force` | boolean | No | Apply even if validation warnings exist |
-
-### `validate_changes`
-
-Check a proposed change without applying it.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `file_path` | string | Yes | Target file |
-| `new_content` | string | Yes | Full resulting file content to validate |
-| `validation_type` | string | Yes | `syntax`, `linter`, `tests`, or `all` |
-| `language` | string | No | Language hint for syntax checking |
+| `file_path` | string | Yes | Absolute path to the file |
+| `old_string` | string | Yes | Exact text to replace (must exist in file) |
+| `new_string` | string | Yes | Replacement text |
+| `create_backup` | boolean | No | Save a `.bak` before editing (default: true) |
 
 ### `batch_edit`
 
-Apply multiple file operations atomically.
+Apply multiple file operations atomically across files.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `operations` | array | Yes | List of `{ file_path, operation, diff_content?, new_path?, new_content? }` |
-| `atomic` | boolean | No | Roll back all changes if any operation fails (default: true) |
-| `validate_all` | boolean | No | Validate all operations before applying any |
+| `operations` | array | Yes | List of operations (see below) |
+| `atomic` | boolean | No | Roll back all if any operation fails (default: true) |
+| `validate_all` | boolean | No | Validate all operations before applying any (default: true) |
 
-`operation` values: `edit`, `create`, `delete`, `rename`.
+Each operation: `{ file_path, operation, old_string?, new_string?, new_path?, new_content? }`
+
+`operation` values: `edit` (requires `old_string` + `new_string`), `create` (requires `new_content`), `delete`, `rename` (requires `new_path`).
 
 ### `rollback_changes`
 
-Restore files from backups created by `apply_diff` or `batch_edit`.
+Restore files from backups created by `edit_file` or `batch_edit`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `backup_paths` | string[] | Yes | Backup file paths returned by the apply operations |
+| `backup_paths` | string[] | Yes | Backup file paths returned by the edit operations |
 
 ## Typical workflow
 
 ```
-search_code_context   →  find the exact lines to change
-generate_minimal_diff →  produce a minimal diff (returns diff_content)
-validate_changes      →  optional: check syntax/lint before applying
-apply_diff            →  apply with automatic backup (pass diff_content directly)
-rollback_changes      →  undo if something went wrong
+search_code_context  →  find the exact text to change
+edit_file            →  replace old_string with new_string (backup created automatically)
+rollback_changes     →  undo if something went wrong
 ```

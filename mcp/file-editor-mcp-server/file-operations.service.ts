@@ -97,7 +97,9 @@ export class FileOperationsService {
       );
 
       if (!isAllowed) {
-        throw new Error(`File path outside allowed workspace: ${normalized}`);
+        const e = new Error(`File path outside allowed workspace: ${normalized}`);
+        (e as any).code = 'PATH_NOT_ALLOWED';
+        throw e;
       }
 
       // Check denied paths
@@ -106,7 +108,9 @@ export class FileOperationsService {
       );
 
       if (isDenied) {
-        throw new Error(`Access denied to path: ${normalized}`);
+        const e = new Error(`Access denied to path: ${normalized}`);
+        (e as any).code = 'PATH_NOT_ALLOWED';
+        throw e;
       }
     }
 
@@ -138,7 +142,9 @@ export class FileOperationsService {
     try {
       await fs.access(validatedPath, fs.constants.F_OK);
     } catch {
-      throw new Error(`File not found: ${validatedPath}`);
+      const e = new Error(`File not found: ${validatedPath}`);
+      (e as any).code = 'FILE_NOT_FOUND';
+      throw e;
     }
 
     // Check permissions

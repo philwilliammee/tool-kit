@@ -18,6 +18,7 @@ cp .env.example .env
 ```
 
 `.env`:
+
 ```
 GITHUB_TOKEN=your_github_personal_access_token_here
 ```
@@ -26,7 +27,8 @@ Environment variables loaded via Node 22's built-in `--env-file=.env` flag (no d
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `GITHUB_TOKEN` | Yes | GitHub personal access token (or use `GITHUB_AUTH_TOKEN`) |
+| `GITHUB_TOKEN` | Yes | GitHub personal access token |
+| `WORKSPACE_ROOT` | Yes | Absolute root path git tools are allowed to access |
 | `MCP_TRANSPORT` | No | `stdio` (default), `http`, or `sse` |
 | `MCP_PORT` | No | Port for HTTP/SSE transport (default: `3006`) |
 
@@ -57,6 +59,9 @@ npm run start:sse
 | `github_create_pull` | Create a pull request |
 | `github_search_repos` | Search repositories |
 | `github_get_user` | Get authenticated user info |
+| `github_git_clone` | Clone a GitHub repo to a local absolute path under `WORKSPACE_ROOT` |
+| `github_git_pull` | Pull latest changes in a local repo under `WORKSPACE_ROOT` |
+| `github_git_push` | Push a branch from a local repo under `WORKSPACE_ROOT` |
 
 ### `github_api` — Generic operation
 

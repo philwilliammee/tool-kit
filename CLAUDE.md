@@ -24,7 +24,7 @@ There is no test framework configured yet.
 
 ## Code Style
 
-Prettier is configured (`.prettierc`): single quotes, trailing commas, 150-char print width, 2-space indent. TypeScript compiles to CommonJS ES6 targeting `dist/`.
+Use default Prettier configuration (no custom `.prettierrc` in this repo). TypeScript compiles to CommonJS ES6 targeting `dist/`.
 
 ### Environment Variables
 
@@ -48,6 +48,7 @@ This workspace is a **CLI AI agent** with two operating modes — interactive de
 It is also the **monorepo home for all MCP tool servers**, which live in `mcp/` alongside the CLI and backend source.
 
 Full reference documentation lives in `docs/`:
+
 - `docs/spec.md` — full project specification (architecture, interfaces, phases)
 - `docs/index.md` — documentation table of contents
 - `docs/archive/` — historical reference material (not part of active docs)

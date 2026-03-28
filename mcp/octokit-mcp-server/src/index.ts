@@ -10,9 +10,11 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
 import { OctokitService } from "./octokit-service.js";
+import { GitService } from "./git-service.js";
 import { GitHubOperation } from "./types.js";
 
 const octokitService = new OctokitService();
+const gitService = new GitService();
 
 // Define available tools
 const tools: Tool[] = [
@@ -206,6 +208,71 @@ const tools: Tool[] = [
       properties: {},
     },
   },
+  {
+    name: "github_git_clone",
+    description:
+      "Clone a GitHub repository to a local directory using token authentication. The target path must be under WORKSPACE_ROOT.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        owner: {
+          type: "string",
+          description: "Repository owner (username or organization)",
+        },
+        repo: {
+          type: "string",
+          description: "Repository name",
+        },
+        targetDir: {
+          type: "string",
+          description: "Absolute path to clone into",
+        },
+      },
+      required: ["owner", "repo", "targetDir"],
+    },
+  },
+  {
+    name: "github_git_pull",
+    description:
+      "Pull the latest changes in an existing local repository. The path must be under WORKSPACE_ROOT.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dir: {
+          type: "string",
+          description: "Absolute path to the local repository",
+        },
+      },
+      required: ["dir"],
+    },
+  },
+  {
+    name: "github_git_push",
+    description:
+      "Push a branch to GitHub using token authentication. The path must be under WORKSPACE_ROOT.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        owner: {
+          type: "string",
+          description: "Repository owner (username or organization)",
+        },
+        repo: {
+          type: "string",
+          description: "Repository name",
+        },
+        dir: {
+          type: "string",
+          description: "Absolute path to the local repository",
+        },
+        branch: {
+          type: "string",
+          description: "Branch name to push",
+        },
+      },
+      required: ["owner", "repo", "dir", "branch"],
+    },
+  },
 ];
 
 // Helper function to validate GitHub API operation parameters
@@ -243,7 +310,7 @@ function validateGitHubParams(args: any): {
   let repo = args.repo;
   if (!repo || typeof repo !== "string" || repo.trim() === "") {
     throw new Error(
-      `Repository name is required and cannot be empty. Please specify the 'repo' parameter.`
+      `Repository name is required and cannot be empty. Please specify the 'repo' parameter.`,
     );
   }
 
@@ -285,7 +352,7 @@ async function executeTool(name: string, args: any) {
           repo,
           title,
           body,
-          labels
+          labels,
         );
       }
 
@@ -305,7 +372,7 @@ async function executeTool(name: string, args: any) {
           head,
           base,
           body,
-          draft
+          draft,
         );
       }
 
@@ -320,6 +387,32 @@ async function executeTool(name: string, args: any) {
 
       case "github_get_user": {
         return await octokitService.getUser();
+      }
+
+      case "github_git_clone": {
+        const { owner, repo, targetDir } = args as {
+          owner: string;
+          repo: string;
+          targetDir: string;
+        };
+        return gitService.clone(owner, repo, targetDir);
+      }
+
+      case "github_git_pull": {
+        const { dir } = args as {
+          dir: string;
+        };
+        return gitService.pull(dir);
+      }
+
+      case "github_git_push": {
+        const { owner, repo, dir, branch } = args as {
+          owner: string;
+          repo: string;
+          dir: string;
+          branch: string;
+        };
+        return gitService.push(owner, repo, dir, branch);
       }
 
       default:
@@ -343,7 +436,7 @@ const server = new Server(
     capabilities: {
       tools: {},
     },
-  }
+  },
 );
 
 // Handle tool listing
@@ -416,11 +509,11 @@ async function main() {
       res.header("Access-Control-Allow-Origin", "*");
       res.header(
         "Access-Control-Allow-Methods",
-        "GET, POST, PUT, DELETE, OPTIONS"
+        "GET, POST, PUT, DELETE, OPTIONS",
       );
       res.header(
         "Access-Control-Allow-Headers",
-        "Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control"
+        "Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control",
       );
       res.header("Access-Control-Allow-Credentials", "true");
       if (req.method === "OPTIONS") {
@@ -462,7 +555,7 @@ async function main() {
 
     app.listen(port, () => {
       console.log(
-        `Octokit MCP Server running on port ${port} with SSE transport`
+        `Octokit MCP Server running on port ${port} with SSE transport`,
       );
       console.log(`Health check: http://localhost:${port}/health`);
       console.log(`SSE endpoint: http://localhost:${port}/sse`);
@@ -476,11 +569,11 @@ async function main() {
       res.header("Access-Control-Allow-Origin", "*");
       res.header(
         "Access-Control-Allow-Methods",
-        "GET, POST, PUT, DELETE, OPTIONS"
+        "GET, POST, PUT, DELETE, OPTIONS",
       );
       res.header(
         "Access-Control-Allow-Headers",
-        "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+        "Origin, X-Requested-With, Content-Type, Accept, Authorization",
       );
       if (req.method === "OPTIONS") {
         res.sendStatus(200);
@@ -523,7 +616,7 @@ async function main() {
 
     app.listen(port, () => {
       console.log(
-        `Octokit MCP Server running on port ${port} with HTTP transport`
+        `Octokit MCP Server running on port ${port} with HTTP transport`,
       );
       console.log(`Health check: http://localhost:${port}/health`);
       console.log(`Tools endpoint: http://localhost:${port}/tools/initialize`);

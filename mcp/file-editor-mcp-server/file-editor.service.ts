@@ -11,8 +11,8 @@ import {
   BatchEditOperation,
   RollbackChangesParams,
   RollbackChangesResponse,
-} from './file-editor.types';
-import { FileOperationsService } from './file-operations.service';
+} from "./file-editor.types";
+import { FileOperationsService } from "./file-operations.service";
 
 function editorError(code: string, message: string): Error {
   const e = new Error(message);
@@ -38,24 +38,28 @@ export class FileEditorService {
     try {
       content = await this.fileOps.readFile(file_path);
     } catch (e: any) {
-      if (e.code === 'ENOENT' || e.code === 'FILE_NOT_FOUND') throw editorError('FILE_NOT_FOUND', `File not found: ${file_path}`);
+      if (e.code === "ENOENT" || e.code === "FILE_NOT_FOUND")
+        throw editorError("FILE_NOT_FOUND", `File not found: ${file_path}`);
       throw e;
     }
 
     if (!content.includes(old_string)) {
-      const preview = old_string.length > 120 ? old_string.substring(0, 120) + '...' : old_string;
+      const preview =
+        old_string.length > 120
+          ? old_string.substring(0, 120) + "..."
+          : old_string;
       throw editorError(
-        'STRING_NOT_FOUND',
-        `old_string not found in file.\nSearched for: ${JSON.stringify(preview)}\nTip: use search_code_context to get exact current content.`
+        "STRING_NOT_FOUND",
+        `old_string not found in file.\nSearched for: ${JSON.stringify(preview)}\nTip: use search_code_context to get exact current content.`,
       );
     }
 
     // Only replace the first occurrence (consistent with Claude Code Edit tool behaviour)
     const newContent = content.replace(old_string, new_string);
 
-    let backupPath = '';
+    let backupPath = "";
     if (create_backup) {
-      backupPath = await this.fileOps.createBackup(file_path, 'edit');
+      backupPath = await this.fileOps.createBackup(file_path, "edit");
     }
 
     await this.fileOps.writeFile(file_path, newContent, false);
@@ -74,15 +78,17 @@ export class FileEditorService {
     const { operations, atomic = true, validate_all = true } = params;
 
     if (!operations || !Array.isArray(operations)) {
-      throw new Error('Operations must be a non-empty array');
+      throw new Error("Operations must be a non-empty array");
     }
     if (operations.length === 0) {
-      throw new Error('No operations provided. Operations array is empty.');
+      throw new Error("No operations provided. Operations array is empty.");
     }
 
     console.error(`[batch_edit] Processing ${operations.length} operation(s)`);
     operations.forEach((op, idx) => {
-      console.error(`[batch_edit] Op ${idx}: type=${op.operation}, file=${op.file_path}`);
+      console.error(
+        `[batch_edit] Op ${idx}: type=${op.operation}, file=${op.file_path}`,
+      );
     });
 
     const results: BatchEditResponse = {
@@ -98,23 +104,46 @@ export class FileEditorService {
       // Phase 1: Validation
       if (validate_all) {
         for (const op of operations) {
-          if (!op.file_path) throw editorError('INVALID_PARAMS', 'Operation missing required field: file_path');
-          if (!op.operation) throw editorError('INVALID_PARAMS', 'Operation missing required field: operation');
-          if (op.operation === 'edit') {
-            if (!op.old_string) throw editorError('INVALID_PARAMS', `Edit operation for ${op.file_path} missing old_string`);
-            if (op.new_string === undefined) throw editorError('INVALID_PARAMS', `Edit operation for ${op.file_path} missing new_string`);
+          if (!op.file_path)
+            throw editorError(
+              "INVALID_PARAMS",
+              "Operation missing required field: file_path",
+            );
+          if (!op.operation)
+            throw editorError(
+              "INVALID_PARAMS",
+              "Operation missing required field: operation",
+            );
+          if (op.operation === "edit") {
+            if (!op.old_string)
+              throw editorError(
+                "INVALID_PARAMS",
+                `Edit operation for ${op.file_path} missing old_string`,
+              );
+            if (op.new_string === undefined)
+              throw editorError(
+                "INVALID_PARAMS",
+                `Edit operation for ${op.file_path} missing new_string`,
+              );
             const exists = await this.fileOps.fileExists(op.file_path);
-            if (!exists) throw editorError('FILE_NOT_FOUND', `File not found: ${op.file_path}`);
+            if (!exists)
+              throw editorError(
+                "FILE_NOT_FOUND",
+                `File not found: ${op.file_path}`,
+              );
           }
         }
       }
 
       // Phase 2: Create backups
       for (const op of operations) {
-        if (op.operation !== 'create') {
+        if (op.operation !== "create") {
           const exists = await this.fileOps.fileExists(op.file_path);
           if (exists) {
-            const backupPath = await this.fileOps.createBackup(op.file_path, op.operation);
+            const backupPath = await this.fileOps.createBackup(
+              op.file_path,
+              op.operation,
+            );
             backupPaths.push(backupPath);
           }
         }
@@ -127,10 +156,12 @@ export class FileEditorService {
       // Phase 3: Apply operations
       for (let i = 0; i < operations.length; i++) {
         const op = operations[i];
-        console.error(`[batch_edit] Processing operation ${i + 1}/${operations.length}: ${op.operation} on ${op.file_path}`);
+        console.error(
+          `[batch_edit] Processing operation ${i + 1}/${operations.length}: ${op.operation} on ${op.file_path}`,
+        );
         try {
           switch (op.operation) {
-            case 'edit': {
+            case "edit": {
               const applyResult = await this.editFile({
                 file_path: op.file_path,
                 old_string: op.old_string!,
@@ -143,21 +174,27 @@ export class FileEditorService {
               break;
             }
 
-            case 'create':
-              if (!op.new_content) throw new Error(`Create operation missing required field: new_content`);
+            case "create":
+              if (!op.new_content)
+                throw new Error(
+                  `Create operation missing required field: new_content`,
+                );
               await this.fileOps.writeFile(op.file_path, op.new_content, false);
               results.results.push({ file_path: op.file_path, success: true });
               results.operations_completed++;
               break;
 
-            case 'delete':
+            case "delete":
               await this.fileOps.deleteFile(op.file_path, false);
               results.results.push({ file_path: op.file_path, success: true });
               results.operations_completed++;
               break;
 
-            case 'rename': {
-              if (!op.new_path) throw new Error(`Rename operation missing required field: new_path`);
+            case "rename": {
+              if (!op.new_path)
+                throw new Error(
+                  `Rename operation missing required field: new_path`,
+                );
               const content = await this.fileOps.readFile(op.file_path);
               await this.fileOps.writeFile(op.new_path, content, false);
               await this.fileOps.deleteFile(op.file_path, false);
@@ -173,15 +210,21 @@ export class FileEditorService {
           results.operations_failed++;
           const errorMsg = error?.message || String(error);
           console.error(`[batch_edit] Operation failed: ${errorMsg}`);
-          results.results.push({ file_path: op.file_path, success: false, error: errorMsg });
+          results.results.push({
+            file_path: op.file_path,
+            success: false,
+            error: errorMsg,
+          });
 
           if (atomic && backupPaths.length > 0) {
             try {
               await this.rollbackChanges({ backup_paths: backupPaths });
             } catch (rollbackError: any) {
-              console.error('[batch_edit] Rollback failed:', rollbackError);
+              console.error("[batch_edit] Rollback failed:", rollbackError);
             }
-            throw new Error(`Batch operation failed at ${op.file_path}: ${errorMsg}`);
+            throw new Error(
+              `Batch operation failed at ${op.file_path}: ${errorMsg}`,
+            );
           }
         }
       }
@@ -198,11 +241,13 @@ export class FileEditorService {
   /**
    * Rollback changes using backup file paths
    */
-  async rollbackChanges(params: RollbackChangesParams): Promise<RollbackChangesResponse> {
+  async rollbackChanges(
+    params: RollbackChangesParams,
+  ): Promise<RollbackChangesResponse> {
     const { backup_paths } = params;
 
     if (!backup_paths || backup_paths.length === 0) {
-      throw new Error('backup_paths is required and must not be empty');
+      throw new Error("backup_paths is required and must not be empty");
     }
 
     const response: RollbackChangesResponse = {
@@ -216,7 +261,9 @@ export class FileEditorService {
         await this.fileOps.restoreFromBackup(backupPath);
         response.files_restored.push(backupPath);
       } catch (error: any) {
-        response.errors?.push(`Failed to restore ${backupPath}: ${error.message}`);
+        response.errors?.push(
+          `Failed to restore ${backupPath}: ${error.message}`,
+        );
       }
     }
 

@@ -19,9 +19,9 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
-import { FileOperationsService } from './file-operations.service.js';
-import { ContextSearchService } from './context-search.service.js';
-import { FileEditorService } from './file-editor.service.js';
+import { FileOperationsService } from "./file-operations.service.js";
+import { ContextSearchService } from "./context-search.service.js";
+import { FileEditorService } from "./file-editor.service.js";
 
 const server = new Server(
   {
@@ -32,7 +32,7 @@ const server = new Server(
     capabilities: {
       tools: {},
     },
-  }
+  },
 );
 
 // Lazy initialization of services
@@ -46,12 +46,14 @@ function getFileOperationsService(): FileOperationsService {
 }
 
 function getContextSearchService(): ContextSearchService {
-  if (!contextSearch) contextSearch = new ContextSearchService(getFileOperationsService());
+  if (!contextSearch)
+    contextSearch = new ContextSearchService(getFileOperationsService());
   return contextSearch;
 }
 
 function getFileEditorService(): FileEditorService {
-  if (!fileEditor) fileEditor = new FileEditorService(getFileOperationsService());
+  if (!fileEditor)
+    fileEditor = new FileEditorService(getFileOperationsService());
   return fileEditor;
 }
 
@@ -64,40 +66,69 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "search_code_context",
-        description: "Find relevant code sections before making changes. Use this to get the exact current text before calling edit_file.",
+        description:
+          "Find relevant code sections before making changes. Use this to get the exact current text before calling edit_file.",
         inputSchema: {
           type: "object",
           properties: {
-            file_path: { type: "string", description: "Absolute or workspace-relative path to the file" },
+            file_path: {
+              type: "string",
+              description: "Absolute or workspace-relative path to the file",
+            },
             search_type: {
               type: "string",
               enum: ["function", "class", "lines", "pattern"],
-              description: "Type of search to perform"
+              description: "Type of search to perform",
             },
-            search_query: { type: "string", description: "Function name, class name, line range (e.g. '10-20'), or regex pattern" },
-            context_lines: { type: "number", description: "Additional context lines (default: 3)", default: 3 },
-            include_imports: { type: "boolean", description: "Include import statements (default: true)", default: true }
+            search_query: {
+              type: "string",
+              description:
+                "Function name, class name, line range (e.g. '10-20'), or regex pattern",
+            },
+            context_lines: {
+              type: "number",
+              description: "Additional context lines (default: 3)",
+              default: 3,
+            },
+            include_imports: {
+              type: "boolean",
+              description: "Include import statements (default: true)",
+              default: true,
+            },
           },
-          required: ["file_path", "search_type", "search_query"]
-        }
+          required: ["file_path", "search_type", "search_query"],
+        },
       },
       {
         name: "edit_file",
-        description: "Replace old_string with new_string in a file. Stateless — no IDs or prior calls needed. The old_string must match exactly (including whitespace). Replaces the first occurrence only. Use search_code_context first if you need to confirm the exact current text.",
+        description:
+          "Replace old_string with new_string in a file. Stateless — no IDs or prior calls needed. The old_string must match exactly (including whitespace). Replaces the first occurrence only. Use search_code_context first if you need to confirm the exact current text.",
         inputSchema: {
           type: "object",
           properties: {
-            file_path: { type: "string", description: "Absolute path to the file to edit" },
-            old_string: { type: "string", description: "Exact text to find and replace (must exist in file)" },
+            file_path: {
+              type: "string",
+              description: "Absolute path to the file to edit",
+            },
+            old_string: {
+              type: "string",
+              description:
+                "Exact text to find and replace (must exist in file)",
+            },
             new_string: { type: "string", description: "Replacement text" },
-            create_backup: { type: "boolean", description: "Create a .bak file before editing (default: true)", default: true }
+            create_backup: {
+              type: "boolean",
+              description: "Create a .bak file before editing (default: true)",
+              default: true,
+            },
           },
-          required: ["file_path", "old_string", "new_string"]
-        }
+          required: ["file_path", "old_string", "new_string"],
+        },
       },
       {
         name: "batch_edit",
-        description: "Apply multiple coordinated operations atomically across files. Supports edit (old_string→new_string), create (new file), delete, and rename. If any operation fails and atomic=true, all changes are rolled back.",
+        description:
+          "Apply multiple coordinated operations atomically across files. Supports edit (old_string→new_string), create (new file), delete, and rename. If any operation fails and atomic=true, all changes are rolled back.",
         inputSchema: {
           type: "object",
           properties: {
@@ -107,25 +138,49 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 type: "object",
                 properties: {
                   file_path: { type: "string" },
-                  operation: { type: "string", enum: ["edit", "create", "delete", "rename"] },
-                  old_string: { type: "string", description: "For edit: exact text to replace" },
-                  new_string: { type: "string", description: "For edit: replacement text" },
-                  new_path: { type: "string", description: "For rename: destination path" },
-                  new_content: { type: "string", description: "For create: full file content" }
+                  operation: {
+                    type: "string",
+                    enum: ["edit", "create", "delete", "rename"],
+                  },
+                  old_string: {
+                    type: "string",
+                    description: "For edit: exact text to replace",
+                  },
+                  new_string: {
+                    type: "string",
+                    description: "For edit: replacement text",
+                  },
+                  new_path: {
+                    type: "string",
+                    description: "For rename: destination path",
+                  },
+                  new_content: {
+                    type: "string",
+                    description: "For create: full file content",
+                  },
                 },
-                required: ["file_path", "operation"]
+                required: ["file_path", "operation"],
               },
-              description: "Array of operations to perform"
+              description: "Array of operations to perform",
             },
-            atomic: { type: "boolean", description: "All-or-nothing (default: true)", default: true },
-            validate_all: { type: "boolean", description: "Validate before applying (default: true)", default: true }
+            atomic: {
+              type: "boolean",
+              description: "All-or-nothing (default: true)",
+              default: true,
+            },
+            validate_all: {
+              type: "boolean",
+              description: "Validate before applying (default: true)",
+              default: true,
+            },
           },
-          required: ["operations"]
-        }
+          required: ["operations"],
+        },
       },
       {
         name: "rollback_changes",
-        description: "Restore files from backup paths returned by batch_edit or edit_file.",
+        description:
+          "Restore files from backup paths returned by batch_edit or edit_file.",
         inputSchema: {
           type: "object",
           properties: {
@@ -133,13 +188,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "array",
               items: { type: "string" },
               description: "Backup file paths to restore",
-              minItems: 1
-            }
+              minItems: 1,
+            },
           },
-          required: ["backup_paths"]
-        }
-      }
-    ]
+          required: ["backup_paths"],
+        },
+      },
+    ],
   };
 });
 
@@ -160,7 +215,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           context_lines: args.context_lines as number,
           include_imports: args.include_imports as boolean,
         });
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
       }
 
       case "edit_file": {
@@ -170,43 +227,63 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           new_string: args.new_string as string,
           create_backup: args.create_backup as boolean,
         });
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
       }
 
       case "batch_edit": {
         let operations = args.operations;
-        if (typeof operations === 'string') {
-          try { operations = JSON.parse(operations); }
-          catch (error: any) {
-            throw new McpError(ErrorCode.InvalidParams, `Invalid operations JSON: ${error.message}`);
+        if (typeof operations === "string") {
+          try {
+            operations = JSON.parse(operations);
+          } catch (error: any) {
+            throw new McpError(
+              ErrorCode.InvalidParams,
+              `Invalid operations JSON: ${error.message}`,
+            );
           }
         }
         if (!Array.isArray(operations) || operations.length === 0) {
-          throw new McpError(ErrorCode.InvalidParams, 'operations must be a non-empty array');
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            "operations must be a non-empty array",
+          );
         }
         const result = await getFileEditorService().batchEdit({
           operations: operations as any,
           atomic: args.atomic as boolean,
           validate_all: args.validate_all as boolean,
         });
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
       }
 
       case "rollback_changes": {
         let backup_paths = args.backup_paths;
-        if (typeof backup_paths === 'string') {
-          try { backup_paths = JSON.parse(backup_paths); }
-          catch (error: any) {
-            throw new McpError(ErrorCode.InvalidParams, `Invalid backup_paths JSON: ${error.message}`);
+        if (typeof backup_paths === "string") {
+          try {
+            backup_paths = JSON.parse(backup_paths);
+          } catch (error: any) {
+            throw new McpError(
+              ErrorCode.InvalidParams,
+              `Invalid backup_paths JSON: ${error.message}`,
+            );
           }
         }
         if (!Array.isArray(backup_paths) || backup_paths.length === 0) {
-          throw new McpError(ErrorCode.InvalidParams, 'backup_paths must be a non-empty array');
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            "backup_paths must be a non-empty array",
+          );
         }
         const result = await getFileEditorService().rollbackChanges({
           backup_paths: backup_paths as string[],
         });
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
       }
 
       default:
@@ -214,12 +291,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   } catch (error: any) {
     console.error(`Error in file-editor MCP server:`, error);
-    const knownCodes = new Set(['FILE_NOT_FOUND', 'STRING_NOT_FOUND', 'INVALID_PARAMS', 'PATH_NOT_ALLOWED']);
-    const code = error.code === 'ENOENT' ? 'FILE_NOT_FOUND'
-      : knownCodes.has(error.code) ? error.code
-      : 'INTERNAL_ERROR';
+    const knownCodes = new Set([
+      "FILE_NOT_FOUND",
+      "STRING_NOT_FOUND",
+      "INVALID_PARAMS",
+      "PATH_NOT_ALLOWED",
+    ]);
+    const code =
+      error.code === "ENOENT"
+        ? "FILE_NOT_FOUND"
+        : knownCodes.has(error.code)
+          ? error.code
+          : "INTERNAL_ERROR";
     return {
-      content: [{ type: "text", text: JSON.stringify({ error: { message: error.message || "Internal server error", code } }, null, 2) }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              error: {
+                message: error.message || "Internal server error",
+                code,
+              },
+            },
+            null,
+            2,
+          ),
+        },
+      ],
       isError: true,
     };
   }

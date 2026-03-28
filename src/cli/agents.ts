@@ -1,12 +1,12 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 
 function readIfExists(filePath: string): string {
   try {
-    return fs.readFileSync(filePath, 'utf-8').trim();
+    return fs.readFileSync(filePath, "utf-8").trim();
   } catch {
-    return '';
+    return "";
   }
 }
 
@@ -20,9 +20,13 @@ function readIfExists(filePath: string): string {
  *   3. <cwd>/.tool-kit/AGENTS.local.md (project-local, gitignored)
  */
 export function loadAgentsInstructions(cwd: string): string {
-  const userGlobal = readIfExists(path.join(os.homedir(), '.tool-kit', 'AGENTS.md'));
-  const project = readIfExists(path.join(cwd, '.tool-kit', 'AGENTS.md'));
-  const projectLocal = readIfExists(path.join(cwd, '.tool-kit', 'AGENTS.local.md'));
+  const userGlobal = readIfExists(
+    path.join(os.homedir(), ".tool-kit", "AGENTS.md"),
+  );
+  const project = readIfExists(path.join(cwd, ".tool-kit", "AGENTS.md"));
+  const projectLocal = readIfExists(
+    path.join(cwd, ".tool-kit", "AGENTS.local.md"),
+  );
 
   const sections: string[] = [];
 
@@ -31,10 +35,10 @@ export function loadAgentsInstructions(cwd: string): string {
   }
 
   // Merge project + project-local under [agents: project]
-  const projectCombined = [project, projectLocal].filter(Boolean).join('\n\n');
+  const projectCombined = [project, projectLocal].filter(Boolean).join("\n\n");
   if (projectCombined) {
     sections.push(`[agents: project]\n${projectCombined}`);
   }
 
-  return sections.join('\n\n');
+  return sections.join("\n\n");
 }

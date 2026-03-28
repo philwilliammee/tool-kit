@@ -1,14 +1,14 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import { execSync } from 'child_process';
-import * as yaml from 'js-yaml';
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
+import { execSync } from "child_process";
+import * as yaml from "js-yaml";
 
 export interface SkillFrontmatter {
   name?: string;
   description?: string;
-  'disable-auto-invoke'?: boolean;
-  'user-invocable'?: boolean;
+  "disable-auto-invoke"?: boolean;
+  "user-invocable"?: boolean;
   hooks?: Record<string, unknown>;
 }
 
@@ -28,7 +28,7 @@ const skillRegistry = new Map<string, Skill>();
 export function parseSkillMd(filePath: string, dirPath: string): Skill | null {
   let raw: string;
   try {
-    raw = fs.readFileSync(filePath, 'utf-8');
+    raw = fs.readFileSync(filePath, "utf-8");
   } catch {
     return null;
   }
@@ -37,20 +37,26 @@ export function parseSkillMd(filePath: string, dirPath: string): Skill | null {
   let body = raw;
 
   // Extract YAML frontmatter delimited by ---
-  if (raw.startsWith('---')) {
-    const endIdx = raw.indexOf('\n---', 3);
+  if (raw.startsWith("---")) {
+    const endIdx = raw.indexOf("\n---", 3);
     if (endIdx !== -1) {
       const yamlStr = raw.slice(3, endIdx).trim();
       try {
         frontmatter = (yaml.load(yamlStr) as SkillFrontmatter) ?? {};
-      } catch { /* bad yaml — treat as no frontmatter */ }
+      } catch {
+        /* bad yaml — treat as no frontmatter */
+      }
       body = raw.slice(endIdx + 4).trimStart();
     }
   }
 
   const dirName = path.basename(dirPath);
-  const name = (frontmatter.name ?? dirName).toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 64);
-  const description = frontmatter.description ?? body.split('\n').find(l => l.trim()) ?? '';
+  const name = (frontmatter.name ?? dirName)
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .slice(0, 64);
+  const description =
+    frontmatter.description ?? body.split("\n").find((l) => l.trim()) ?? "";
 
   return {
     name,
@@ -58,8 +64,8 @@ export function parseSkillMd(filePath: string, dirPath: string): Skill | null {
     dirPath,
     body,
     frontmatter,
-    userInvocable: frontmatter['user-invocable'] !== false,
-    disableAutoInvoke: frontmatter['disable-auto-invoke'] === true,
+    userInvocable: frontmatter["user-invocable"] !== false,
+    disableAutoInvoke: frontmatter["disable-auto-invoke"] === true,
   };
 }
 
@@ -73,8 +79,12 @@ function scanSkillsDir(baseDir: string): void {
   }
   for (const entry of entries) {
     const dirPath = path.join(baseDir, entry);
-    try { if (!fs.lstatSync(dirPath).isDirectory()) continue; } catch { continue; }
-    const skillFile = path.join(dirPath, 'SKILL.md');
+    try {
+      if (!fs.lstatSync(dirPath).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    const skillFile = path.join(dirPath, "SKILL.md");
     if (fs.existsSync(skillFile)) {
       const skill = parseSkillMd(skillFile, dirPath);
       if (skill) skillRegistry.set(skill.name, skill);
@@ -89,15 +99,15 @@ function scanSkillsDir(baseDir: string): void {
  */
 export function loadSkills(cwd: string): void {
   skillRegistry.clear();
-  scanSkillsDir(path.join(os.homedir(), '.tool-kit', 'skills'));
-  scanSkillsDir(path.join(cwd, '.tool-kit', 'skills'));
-  scanSkillsDir(path.join(cwd, '.tool-kit', 'skills.local'));
+  scanSkillsDir(path.join(os.homedir(), ".tool-kit", "skills"));
+  scanSkillsDir(path.join(cwd, ".tool-kit", "skills"));
+  scanSkillsDir(path.join(cwd, ".tool-kit", "skills.local"));
 }
 
 export function listSkills(): { name: string; description: string }[] {
   return Array.from(skillRegistry.values())
-    .filter(s => s.userInvocable)
-    .map(s => ({ name: s.name, description: s.description }));
+    .filter((s) => s.userInvocable)
+    .map((s) => ({ name: s.name, description: s.description }));
 }
 
 export function getSkill(name: string): Skill | undefined {
@@ -114,7 +124,11 @@ interface RenderContext {
  * Render a skill's body with all substitutions applied.
  * Returns `[skill: <name>]\n<rendered body>` or null if skill not found.
  */
-export function renderSkill(name: string, argsStr: string, ctx: RenderContext): string | null {
+export function renderSkill(
+  name: string,
+  argsStr: string,
+  ctx: RenderContext,
+): string | null {
   const skill = getSkill(name);
   if (!skill) return null;
 
@@ -123,7 +137,12 @@ export function renderSkill(name: string, argsStr: string, ctx: RenderContext): 
   // 1. !`command` substitutions — run in session's cwd
   body = body.replace(/!`([^`]+)`/g, (_match, cmd: string) => {
     try {
-      return execSync(cmd, { cwd: ctx.cwd, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trimEnd();
+      return execSync(cmd, {
+        cwd: ctx.cwd,
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+        .toString()
+        .trimEnd();
     } catch (err) {
       return `[command failed: ${(err as Error).message}]`;
     }
@@ -131,10 +150,13 @@ export function renderSkill(name: string, argsStr: string, ctx: RenderContext): 
 
   // 2. Positional args $0, $1, ...
   const argParts = argsStr ? argsStr.split(/\s+/) : [];
-  body = body.replace(/\$(\d+)/g, (_match, idx: string) => argParts[parseInt(idx, 10)] ?? '');
+  body = body.replace(
+    /\$(\d+)/g,
+    (_match, idx: string) => argParts[parseInt(idx, 10)] ?? "",
+  );
 
   // 3. $ARGUMENTS — full arg string
-  if (body.includes('$ARGUMENTS')) {
+  if (body.includes("$ARGUMENTS")) {
     body = body.replace(/\$ARGUMENTS/g, argsStr);
   } else if (argsStr) {
     body = body + `\n\nARGUMENTS: ${argsStr}`;

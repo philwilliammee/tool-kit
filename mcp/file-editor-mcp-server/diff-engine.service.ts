@@ -3,13 +3,8 @@
  * Handles diff generation using industry-standard unified diff format
  */
 
-import {
-  structuredPatch,
-  createPatch,
-  applyPatch,
-  parsePatch
-} from 'diff';
-import { v4 as uuidv4 } from 'uuid';
+import { structuredPatch, createPatch, applyPatch, parsePatch } from "diff";
+import { v4 as uuidv4 } from "uuid";
 import {
   DiffAlgorithm,
   GenerateMinimalDiffParams,
@@ -17,8 +12,8 @@ import {
   DiffStats,
   DiffValidation,
   DiffCacheEntry,
-} from './file-editor.types';
-import { FileOperationsService } from './file-operations.service';
+} from "./file-editor.types";
+import { FileOperationsService } from "./file-operations.service";
 
 export class DiffEngineService {
   private fileOps: FileOperationsService;
@@ -37,16 +32,16 @@ export class DiffEngineService {
     fileName: string,
     oldContent: string,
     newContent: string,
-    contextLines: number = 3
+    contextLines: number = 3,
   ): string {
     // Use createPatch to generate a proper unified diff
     const patch = createPatch(
       fileName,
       oldContent,
       newContent,
-      '', // old header
-      '', // new header
-      { context: contextLines }
+      "", // old header
+      "", // new header
+      { context: contextLines },
     );
     return patch;
   }
@@ -62,8 +57,17 @@ export class DiffEngineService {
   /**
    * Generate minimal diff between old and new content using unified diff format
    */
-  async generateMinimalDiff(params: GenerateMinimalDiffParams): Promise<GenerateMinimalDiffResponse> {
-    const { file_path, old_content, new_content, start_line, algorithm = 'unified', validate_before = true } = params;
+  async generateMinimalDiff(
+    params: GenerateMinimalDiffParams,
+  ): Promise<GenerateMinimalDiffResponse> {
+    const {
+      file_path,
+      old_content,
+      new_content,
+      start_line,
+      algorithm = "unified",
+      validate_before = true,
+    } = params;
 
     // Check cache first
     const cacheKey = this.getCacheKey(old_content, new_content);
@@ -71,7 +75,7 @@ export class DiffEngineService {
     if (cached) {
       return {
         diff_id: cached.diff_id,
-        diff_format: 'unified',
+        diff_format: "unified",
         diff_content: cached.diff_content,
         stats: cached.stats,
         validation: {
@@ -93,18 +97,25 @@ export class DiffEngineService {
 
     // Generate unified diff patch with context
     // This will be applied with fuzzy matching, so we don't need exact content matching
-    const patch = this.generateUnifiedPatch(file_path, old_content, new_content, 3);
+    const patch = this.generateUnifiedPatch(
+      file_path,
+      old_content,
+      new_content,
+      3,
+    );
 
     // Test if patch can be applied to the file
     const canApply = this.canApplyPatch(fileContent, patch);
 
     if (!canApply && validate_before) {
       const previewLength = Math.min(100, old_content.length);
-      const preview = old_content.substring(0, previewLength) + (old_content.length > previewLength ? '...' : '');
+      const preview =
+        old_content.substring(0, previewLength) +
+        (old_content.length > previewLength ? "..." : "");
       throw new Error(
         `Patch cannot be applied to file. The content may have changed.\n` +
-        `Searched for: ${JSON.stringify(preview)}\n` +
-        `Try using search_code_context first to get exact content.`
+          `Searched for: ${JSON.stringify(preview)}\n` +
+          `Try using search_code_context first to get exact content.`,
       );
     }
 
@@ -114,7 +125,7 @@ export class DiffEngineService {
     // Validate if requested
     const validation: DiffValidation = {
       can_apply: canApply,
-      warnings: canApply ? [] : ['Patch may not apply cleanly'],
+      warnings: canApply ? [] : ["Patch may not apply cleanly"],
       conflicts: [],
     };
 
@@ -122,7 +133,7 @@ export class DiffEngineService {
       // Test apply to check for issues
       const testResult = applyPatch(fileContent, patch);
       if (testResult === false) {
-        validation.warnings.push('Patch test application failed');
+        validation.warnings.push("Patch test application failed");
       }
     }
 
@@ -144,7 +155,7 @@ export class DiffEngineService {
 
     return {
       diff_id,
-      diff_format: 'unified',
+      diff_format: "unified",
       diff_content: patch,
       stats,
       validation,
@@ -184,9 +195,9 @@ export class DiffEngineService {
       for (const file of parsed) {
         for (const hunk of file.hunks) {
           for (const line of hunk.lines) {
-            if (line.startsWith('+')) {
+            if (line.startsWith("+")) {
               added++;
-            } else if (line.startsWith('-')) {
+            } else if (line.startsWith("-")) {
               removed++;
             }
           }
@@ -201,14 +212,14 @@ export class DiffEngineService {
       };
     } catch (error) {
       // Fallback to simple parsing if parsePatch fails
-      const lines = patch.split('\n');
+      const lines = patch.split("\n");
       let added = 0;
       let removed = 0;
 
       for (const line of lines) {
-        if (line.startsWith('+') && !line.startsWith('+++')) {
+        if (line.startsWith("+") && !line.startsWith("+++")) {
           added++;
-        } else if (line.startsWith('-') && !line.startsWith('---')) {
+        } else if (line.startsWith("-") && !line.startsWith("---")) {
           removed++;
         }
       }
@@ -229,7 +240,7 @@ export class DiffEngineService {
     filePath: string,
     fileContent: string,
     oldContent: string,
-    newContent: string
+    newContent: string,
   ): Promise<DiffValidation> {
     const validation: DiffValidation = {
       can_apply: true,
@@ -240,20 +251,22 @@ export class DiffEngineService {
     // Check if old content exists
     if (!fileContent.includes(oldContent)) {
       validation.can_apply = false;
-      validation.conflicts.push('Old content not found in file');
+      validation.conflicts.push("Old content not found in file");
       return validation;
     }
 
     // Check file size after change
-    const newFileSize = Buffer.byteLength(fileContent.replace(oldContent, newContent));
+    const newFileSize = Buffer.byteLength(
+      fileContent.replace(oldContent, newContent),
+    );
     if (newFileSize > 10485760) {
       // 10MB
-      validation.warnings.push('File will exceed size limit after change');
+      validation.warnings.push("File will exceed size limit after change");
     }
 
     // Basic syntax check for common file types
-    const ext = filePath.split('.').pop()?.toLowerCase();
-    if (ext === 'json') {
+    const ext = filePath.split(".").pop()?.toLowerCase();
+    if (ext === "json") {
       try {
         JSON.parse(newContent);
       } catch (error: any) {
@@ -270,10 +283,12 @@ export class DiffEngineService {
   private generatePreview(oldContent: string, newContent: string): string {
     try {
       // Use structuredPatch to get a structured diff with hunks
-      const patch = structuredPatch('', '', oldContent, newContent, '', '', { context: 3 });
+      const patch = structuredPatch("", "", oldContent, newContent, "", "", {
+        context: 3,
+      });
 
       if (!patch || !patch.hunks || patch.hunks.length === 0) {
-        return 'No changes detected';
+        return "No changes detected";
       }
 
       // Format the first hunk as a preview
@@ -281,26 +296,32 @@ export class DiffEngineService {
       const lines = firstHunk.lines.slice(0, 20); // Limit to first 20 lines
 
       let preview = `@@ -${firstHunk.oldStart},${firstHunk.oldLines} +${firstHunk.newStart},${firstHunk.newLines} @@\n`;
-      preview += lines.join('\n');
+      preview += lines.join("\n");
 
       if (firstHunk.lines.length > 20 || patch.hunks.length > 1) {
-        const totalChanges = patch.hunks.reduce((sum, h) => sum + h.lines.filter(l => l.startsWith('+') || l.startsWith('-')).length, 0);
+        const totalChanges = patch.hunks.reduce(
+          (sum, h) =>
+            sum +
+            h.lines.filter((l) => l.startsWith("+") || l.startsWith("-"))
+              .length,
+          0,
+        );
         preview += `\n... (${totalChanges} total changes in ${patch.hunks.length} hunk(s))`;
       }
 
       return preview;
     } catch (error) {
       // Fallback to simple preview
-      const oldLines = oldContent.split('\n');
-      const newLines = newContent.split('\n');
+      const oldLines = oldContent.split("\n");
+      const newLines = newContent.split("\n");
       const maxLines = 10;
 
       if (oldLines.length <= maxLines && newLines.length <= maxLines) {
         return `Old:\n${oldContent}\n\nNew:\n${newContent}`;
       }
 
-      const oldPreview = oldLines.slice(0, maxLines).join('\n');
-      const newPreview = newLines.slice(0, maxLines).join('\n');
+      const oldPreview = oldLines.slice(0, maxLines).join("\n");
+      const newPreview = newLines.slice(0, maxLines).join("\n");
       return `Old (first ${maxLines} lines):\n${oldPreview}...\n\nNew (first ${maxLines} lines):\n${newPreview}...`;
     }
   }
@@ -321,7 +342,7 @@ export class DiffEngineService {
       const patch = this.patchCache.get(diff_id)!;
       return {
         diff_id,
-        file_path: '', // Will be provided by caller
+        file_path: "", // Will be provided by caller
         diff_content: patch,
         stats: this.calculateStatsFromPatch(patch),
         created_at: new Date(),
@@ -347,17 +368,21 @@ export class DiffEngineService {
    * Generate cache key
    */
   private getCacheKey(oldContent: string, newContent: string): string {
-    const crypto = require('crypto');
-    const hash = crypto.createHash('sha256');
+    const crypto = require("crypto");
+    const hash = crypto.createHash("sha256");
     hash.update(oldContent);
     hash.update(newContent);
-    return hash.digest('hex');
+    return hash.digest("hex");
   }
 
   /**
    * Apply unified diff patch to content using the diff library
    */
-  applyDiffToContent(content: string, patchContent: string, diff_id?: string): string {
+  applyDiffToContent(
+    content: string,
+    patchContent: string,
+    diff_id?: string,
+  ): string {
     // Get the patch - either from cache or directly provided
     let patch = patchContent;
 
@@ -371,16 +396,15 @@ export class DiffEngineService {
     if (result === false) {
       // Patch could not be applied
       throw new Error(
-        'Patch could not be applied to file. The file may have been modified.\n' +
-        'Possible reasons:\n' +
-        '- File content has changed since patch was generated\n' +
-        '- Context lines don\'t match (surrounding code changed)\n' +
-        '- Line numbers have shifted\n' +
-        '\nTry using search_code_context to get current content and regenerate the patch.'
+        "Patch could not be applied to file. The file may have been modified.\n" +
+          "Possible reasons:\n" +
+          "- File content has changed since patch was generated\n" +
+          "- Context lines don't match (surrounding code changed)\n" +
+          "- Line numbers have shifted\n" +
+          "\nTry using search_code_context to get current content and regenerate the patch.",
       );
     }
 
     return result;
   }
 }
-

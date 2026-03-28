@@ -1,15 +1,15 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import { execSync } from 'child_process';
-import * as yaml from 'js-yaml';
-import OpenAI from 'openai';
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
+import { execSync } from "child_process";
+import * as yaml from "js-yaml";
+import OpenAI from "openai";
 
 interface SkillFrontmatter {
   name?: string;
   description?: string;
-  'disable-auto-invoke'?: boolean;
-  'user-invocable'?: boolean;
+  "disable-auto-invoke"?: boolean;
+  "user-invocable"?: boolean;
   hooks?: Record<string, unknown>;
 }
 
@@ -31,7 +31,7 @@ interface RenderContext {
 function parseSkillMd(filePath: string, dirPath: string): ServerSkill | null {
   let raw: string;
   try {
-    raw = fs.readFileSync(filePath, 'utf-8');
+    raw = fs.readFileSync(filePath, "utf-8");
   } catch {
     return null;
   }
@@ -39,20 +39,26 @@ function parseSkillMd(filePath: string, dirPath: string): ServerSkill | null {
   let frontmatter: SkillFrontmatter = {};
   let body = raw;
 
-  if (raw.startsWith('---')) {
-    const endIdx = raw.indexOf('\n---', 3);
+  if (raw.startsWith("---")) {
+    const endIdx = raw.indexOf("\n---", 3);
     if (endIdx !== -1) {
       const yamlStr = raw.slice(3, endIdx).trim();
       try {
         frontmatter = (yaml.load(yamlStr) as SkillFrontmatter) ?? {};
-      } catch { /* bad yaml — ignore */ }
+      } catch {
+        /* bad yaml — ignore */
+      }
       body = raw.slice(endIdx + 4).trimStart();
     }
   }
 
   const dirName = path.basename(dirPath);
-  const name = (frontmatter.name ?? dirName).toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 64);
-  const description = frontmatter.description ?? body.split('\n').find(l => l.trim()) ?? '';
+  const name = (frontmatter.name ?? dirName)
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .slice(0, 64);
+  const description =
+    frontmatter.description ?? body.split("\n").find((l) => l.trim()) ?? "";
 
   return {
     name,
@@ -60,7 +66,7 @@ function parseSkillMd(filePath: string, dirPath: string): ServerSkill | null {
     dirPath,
     body,
     frontmatter,
-    disableAutoInvoke: frontmatter['disable-auto-invoke'] === true,
+    disableAutoInvoke: frontmatter["disable-auto-invoke"] === true,
   };
 }
 
@@ -68,19 +74,27 @@ export class SkillsService {
   private registry = new Map<string, ServerSkill>();
 
   constructor(cwd: string) {
-    this.scan(path.join(os.homedir(), '.tool-kit', 'skills'));
-    this.scan(path.join(cwd, '.tool-kit', 'skills'));
-    this.scan(path.join(cwd, '.tool-kit', 'skills.local'));
+    this.scan(path.join(os.homedir(), ".tool-kit", "skills"));
+    this.scan(path.join(cwd, ".tool-kit", "skills"));
+    this.scan(path.join(cwd, ".tool-kit", "skills.local"));
   }
 
   private scan(baseDir: string): void {
     if (!fs.existsSync(baseDir)) return;
     let entries: string[];
-    try { entries = fs.readdirSync(baseDir); } catch { return; }
+    try {
+      entries = fs.readdirSync(baseDir);
+    } catch {
+      return;
+    }
     for (const entry of entries) {
       const dirPath = path.join(baseDir, entry);
-      try { if (!fs.lstatSync(dirPath).isDirectory()) continue; } catch { continue; }
-      const skillFile = path.join(dirPath, 'SKILL.md');
+      try {
+        if (!fs.lstatSync(dirPath).isDirectory()) continue;
+      } catch {
+        continue;
+      }
+      const skillFile = path.join(dirPath, "SKILL.md");
       if (fs.existsSync(skillFile)) {
         const skill = parseSkillMd(skillFile, dirPath);
         if (skill) this.registry.set(skill.name, skill);
@@ -101,7 +115,12 @@ export class SkillsService {
     // 1. !`command` substitutions — run in session's cwd
     body = body.replace(/!`([^`]+)`/g, (_match, cmd: string) => {
       try {
-        return execSync(cmd, { cwd: ctx.cwd, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trimEnd();
+        return execSync(cmd, {
+          cwd: ctx.cwd,
+          stdio: ["ignore", "pipe", "ignore"],
+        })
+          .toString()
+          .trimEnd();
       } catch (err) {
         return `[command failed: ${(err as Error).message}]`;
       }
@@ -109,10 +128,13 @@ export class SkillsService {
 
     // 2. Positional args $0, $1, ...
     const argParts = argsStr ? argsStr.split(/\s+/) : [];
-    body = body.replace(/\$(\d+)/g, (_m, idx: string) => argParts[parseInt(idx, 10)] ?? '');
+    body = body.replace(
+      /\$(\d+)/g,
+      (_m, idx: string) => argParts[parseInt(idx, 10)] ?? "",
+    );
 
     // 3. $ARGUMENTS
-    if (body.includes('$ARGUMENTS')) {
+    if (body.includes("$ARGUMENTS")) {
       body = body.replace(/\$ARGUMENTS/g, argsStr);
     } else if (argsStr) {
       body += `\n\nARGUMENTS: ${argsStr}`;
@@ -131,32 +153,35 @@ export class SkillsService {
    * The LLM calls this tool to inject a skill's context into the conversation.
    */
   buildSkillTool(): OpenAI.ChatCompletionTool | null {
-    const autoSkills = Array.from(this.registry.values()).filter(s => !s.disableAutoInvoke);
+    const autoSkills = Array.from(this.registry.values()).filter(
+      (s) => !s.disableAutoInvoke,
+    );
     if (autoSkills.length === 0) return null;
 
     return {
-      type: 'function',
+      type: "function",
       function: {
-        name: 'Skill',
+        name: "Skill",
         description:
-          'Invoke a skill to inject specialised context and instructions into the conversation. ' +
-          'Use when the task matches one of the available skill descriptions.\n\n' +
-          'Available skills:\n' +
-          autoSkills.map(s => `- ${s.name}: ${s.description}`).join('\n'),
+          "Invoke a skill to inject specialised context and instructions into the conversation. " +
+          "Use when the task matches one of the available skill descriptions.\n\n" +
+          "Available skills:\n" +
+          autoSkills.map((s) => `- ${s.name}: ${s.description}`).join("\n"),
         parameters: {
-          type: 'object',
+          type: "object",
           properties: {
             name: {
-              type: 'string',
-              description: 'The skill name to invoke',
-              enum: autoSkills.map(s => s.name),
+              type: "string",
+              description: "The skill name to invoke",
+              enum: autoSkills.map((s) => s.name),
             },
             arguments: {
-              type: 'string',
-              description: 'Optional arguments passed to the skill ($ARGUMENTS substitution)',
+              type: "string",
+              description:
+                "Optional arguments passed to the skill ($ARGUMENTS substitution)",
             },
           },
-          required: ['name'],
+          required: ["name"],
         },
       },
     };

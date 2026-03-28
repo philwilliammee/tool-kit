@@ -2,11 +2,16 @@
  * Type definitions for File Editor MCP Server
  */
 
-export type SearchType = 'function' | 'class' | 'lines' | 'pattern';
-export type DiffAlgorithm = 'unified' | 'character' | 'word' | 'line';
-export type ValidationType = 'syntax' | 'linter' | 'tests' | 'all';
-export type OperationType = 'edit' | 'create' | 'delete' | 'rename';
-export type ErrorCategory = 'validation' | 'permission' | 'conflict' | 'syntax' | 'system';
+export type SearchType = "function" | "class" | "lines" | "pattern";
+export type DiffAlgorithm = "unified" | "character" | "word" | "line";
+export type ValidationType = "syntax" | "linter" | "tests" | "all";
+export type OperationType = "edit" | "create" | "delete" | "rename";
+export type ErrorCategory =
+  | "validation"
+  | "permission"
+  | "conflict"
+  | "syntax"
+  | "system";
 
 export interface SearchCodeContextParams {
   file_path: string;
@@ -168,11 +173,11 @@ export interface BatchEditResponse {
   operations_completed: number;
   operations_failed: number;
   results: BatchEditResult[];
-  backup_paths?: string[];  // Backup paths for rollback (if atomic and backups created)
+  backup_paths?: string[]; // Backup paths for rollback (if atomic and backups created)
 }
 
 export interface RollbackChangesParams {
-  backup_paths: string[];  // Required: backup file paths to restore
+  backup_paths: string[]; // Required: backup file paths to restore
 }
 
 export interface RollbackChangesResponse {
@@ -268,4 +273,3 @@ export interface BackupInfo {
   created_at: Date;
   operation_type: string;
 }
-

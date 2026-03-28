@@ -24,7 +24,7 @@ const server = new Server(
       resources: {},
       tools: {},
     },
-  }
+  },
 );
 
 // Tool handlers
@@ -136,7 +136,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         typeof args.command !== "string"
       ) {
         throw new Error(
-          "Invalid arguments: 'command' parameter is required and must be a string"
+          "Invalid arguments: 'command' parameter is required and must be a string",
         );
       }
 

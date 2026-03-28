@@ -85,7 +85,7 @@ export function validateCommand(command: string): {
     } else {
       // For other commands, use word boundary check
       const pattern = new RegExp(
-        `(?:^|\\s)${blocked.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s|$)`
+        `(?:^|\\s)${blocked.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s|$)`,
       );
       if (pattern.test(lowerCommand)) {
         return { valid: false, reason: `Blocked command: ${blocked}` };

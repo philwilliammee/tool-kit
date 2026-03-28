@@ -1,13 +1,13 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import { spawn } from 'child_process';
-import axios from 'axios';
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
+import { spawn } from "child_process";
+import axios from "axios";
 
 // ── Settings schema ────────────────────────────────────────────────────────────
 
 interface CommandHandlerConfig {
-  type: 'command';
+  type: "command";
   command: string;
   timeout?: number;
   async?: boolean;
@@ -15,7 +15,7 @@ interface CommandHandlerConfig {
 }
 
 interface HttpHandlerConfig {
-  type: 'http';
+  type: "http";
   url: string;
   headers?: Record<string, string>;
   allowedEnvVars?: string[];
@@ -38,7 +38,7 @@ interface HooksSettings {
 
 export interface HookOutput {
   contextInjection?: string;
-  decision?: 'block';
+  decision?: "block";
   reason?: string;
 }
 
@@ -46,7 +46,7 @@ export interface HookOutput {
 
 function loadSettings(filePath: string): HooksSettings {
   try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as HooksSettings;
+    return JSON.parse(fs.readFileSync(filePath, "utf-8")) as HooksSettings;
   } catch {
     return {};
   }
@@ -73,12 +73,12 @@ function runCommandHook(
 ): Promise<HookOutput> {
   return new Promise((resolve) => {
     const timeoutMs = (handler.timeout ?? 30) * 1000;
-    let stdout = '';
+    let stdout = "";
     let timedOut = false;
 
-    const child = spawn('sh', ['-c', handler.command], {
+    const child = spawn("sh", ["-c", handler.command], {
       cwd,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ["pipe", "pipe", "pipe"],
     });
 
     const timer = setTimeout(() => {
@@ -88,17 +88,21 @@ function runCommandHook(
       resolve({});
     }, timeoutMs);
 
-    child.stdout.on('data', (d: Buffer) => { stdout += d.toString(); });
-    child.stderr.on('data', (d: Buffer) => {
+    child.stdout.on("data", (d: Buffer) => {
+      stdout += d.toString();
+    });
+    child.stderr.on("data", (d: Buffer) => {
       const msg = d.toString().trim();
       if (msg) console.error(`[hooks] Hook stderr: ${msg}`);
     });
 
-    child.on('close', (code) => {
+    child.on("close", (code) => {
       clearTimeout(timer);
       if (timedOut) return;
       if (code !== 0) {
-        console.error(`[hooks] Command hook exited with code ${code}: ${handler.command}`);
+        console.error(
+          `[hooks] Command hook exited with code ${code}: ${handler.command}`,
+        );
         resolve({});
         return;
       }
@@ -109,7 +113,7 @@ function runCommandHook(
       }
     });
 
-    child.on('error', (err) => {
+    child.on("error", (err) => {
       clearTimeout(timer);
       console.error(`[hooks] Failed to spawn hook: ${err.message}`);
       resolve({});
@@ -135,13 +139,18 @@ async function runHttpHook(
   const timeoutMs = (handler.timeout ?? 10) * 1000;
   const allowed = handler.allowedEnvVars ?? [];
 
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
   for (const [k, v] of Object.entries(handler.headers ?? {})) {
     headers[k] = resolveEnvVars(v, allowed);
   }
 
   try {
-    const resp = await axios.post(handler.url, input, { headers, timeout: timeoutMs });
+    const resp = await axios.post(handler.url, input, {
+      headers,
+      timeout: timeoutMs,
+    });
     return (resp.data as HookOutput) ?? {};
   } catch (err) {
     console.error(`[hooks] HTTP hook error: ${(err as Error).message}`);
@@ -154,7 +163,7 @@ async function runHandler(
   input: Record<string, unknown>,
   cwd: string,
 ): Promise<HookOutput> {
-  if (handler.type === 'command') {
+  if (handler.type === "command") {
     if (handler.async) {
       runCommandHook(handler, input, cwd).catch(() => {});
       return {};
@@ -166,7 +175,7 @@ async function runHandler(
 }
 
 function handlerKey(event: string, handler: HandlerConfig): string {
-  const id = handler.type === 'command' ? handler.command : handler.url;
+  const id = handler.type === "command" ? handler.command : handler.url;
   return `${event}::${id}`;
 }
 
@@ -179,9 +188,13 @@ export class HooksService {
 
   constructor(cwd: string) {
     this.cwd = cwd;
-    const global = loadSettings(path.join(os.homedir(), '.tool-kit', 'settings.json'));
-    const project = loadSettings(path.join(cwd, '.tool-kit', 'settings.json'));
-    const local = loadSettings(path.join(cwd, '.tool-kit', 'settings.local.json'));
+    const global = loadSettings(
+      path.join(os.homedir(), ".tool-kit", "settings.json"),
+    );
+    const project = loadSettings(path.join(cwd, ".tool-kit", "settings.json"));
+    const local = loadSettings(
+      path.join(cwd, ".tool-kit", "settings.local.json"),
+    );
     this.settings = mergeSettings(global, project, local);
   }
 
@@ -189,7 +202,10 @@ export class HooksService {
    * Register hooks from a skill's frontmatter. Called when a skill is invoked.
    * Resolves ${TOOL_KIT_SKILL_DIR} in command strings using the skill's directory.
    */
-  registerSkillHooks(skillDir: string, hooksData: Record<string, unknown>): void {
+  registerSkillHooks(
+    skillDir: string,
+    hooksData: Record<string, unknown>,
+  ): void {
     const sub = (s: string) => s.replace(/\$\{TOOL_KIT_SKILL_DIR\}/g, skillDir);
 
     for (const [event, groups] of Object.entries(hooksData)) {
@@ -197,36 +213,56 @@ export class HooksService {
       const resolved: HookGroup[] = [];
 
       for (const group of groups) {
-        if (typeof group !== 'object' || group === null) continue;
+        if (typeof group !== "object" || group === null) continue;
         const g = group as Record<string, unknown>;
         const rawHandlers = Array.isArray(g.hooks) ? g.hooks : [];
         const handlers: HandlerConfig[] = [];
 
         for (const h of rawHandlers) {
-          if (typeof h !== 'object' || h === null) continue;
+          if (typeof h !== "object" || h === null) continue;
           const handler = h as Record<string, unknown>;
-          if (handler.type === 'command' && typeof handler.command === 'string') {
+          if (
+            handler.type === "command" &&
+            typeof handler.command === "string"
+          ) {
             handlers.push({
-              type: 'command',
+              type: "command",
               command: sub(handler.command),
-              timeout: typeof handler.timeout === 'number' ? handler.timeout : undefined,
+              timeout:
+                typeof handler.timeout === "number"
+                  ? handler.timeout
+                  : undefined,
               async: handler.async === true,
               once: handler.once === true,
             });
-          } else if (handler.type === 'http' && typeof handler.url === 'string') {
+          } else if (
+            handler.type === "http" &&
+            typeof handler.url === "string"
+          ) {
             handlers.push({
-              type: 'http',
+              type: "http",
               url: handler.url,
-              headers: typeof handler.headers === 'object' ? handler.headers as Record<string, string> : undefined,
-              allowedEnvVars: Array.isArray(handler.allowedEnvVars) ? handler.allowedEnvVars as string[] : undefined,
-              timeout: typeof handler.timeout === 'number' ? handler.timeout : undefined,
+              headers:
+                typeof handler.headers === "object"
+                  ? (handler.headers as Record<string, string>)
+                  : undefined,
+              allowedEnvVars: Array.isArray(handler.allowedEnvVars)
+                ? (handler.allowedEnvVars as string[])
+                : undefined,
+              timeout:
+                typeof handler.timeout === "number"
+                  ? handler.timeout
+                  : undefined,
               once: handler.once === true,
             });
           }
         }
 
         if (handlers.length > 0) {
-          resolved.push({ matcher: typeof g.matcher === 'string' ? g.matcher : undefined, hooks: handlers });
+          resolved.push({
+            matcher: typeof g.matcher === "string" ? g.matcher : undefined,
+            hooks: handlers,
+          });
         }
       }
 
@@ -246,11 +282,11 @@ export class HooksService {
     toolName?: string,
   ): Promise<HookOutput> {
     const groups = this.settings.hooks?.[event] ?? [];
-    let contextInjection = '';
+    let contextInjection = "";
 
     for (const group of groups) {
       // Check matcher (only relevant for tool events)
-      if (group.matcher && group.matcher !== '*' && toolName) {
+      if (group.matcher && group.matcher !== "*" && toolName) {
         try {
           if (!new RegExp(group.matcher).test(toolName)) continue;
         } catch {
@@ -268,11 +304,12 @@ export class HooksService {
 
         const output = await runHandler(handler, input, this.cwd);
 
-        if (output.decision === 'block') {
+        if (output.decision === "block") {
           return output;
         }
         if (output.contextInjection) {
-          contextInjection += (contextInjection ? '\n' : '') + output.contextInjection;
+          contextInjection +=
+            (contextInjection ? "\n" : "") + output.contextInjection;
         }
       }
     }
@@ -286,6 +323,6 @@ export class HooksService {
     const events = Object.entries(hooks).map(
       ([event, groups]) => `  ${event}: ${groups.length} group(s)`,
     );
-    return events.length ? events.join('\n') : '  (no hooks configured)';
+    return events.length ? events.join("\n") : "  (no hooks configured)";
   }
 }

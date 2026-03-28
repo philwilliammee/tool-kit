@@ -1,6 +1,6 @@
-import { spawnSync } from 'child_process';
-import fs from 'fs';
-import path from 'path';
+import { spawnSync } from "child_process";
+import fs from "fs";
+import path from "path";
 
 export interface GitResult {
   success: boolean;
@@ -16,13 +16,13 @@ export class GitService {
   constructor() {
     const token = process.env.GITHUB_TOKEN;
     if (!token) {
-      throw new Error('GITHUB_TOKEN environment variable is required');
+      throw new Error("GITHUB_TOKEN environment variable is required");
     }
     this.token = token;
 
     const workspaceRoot = process.env.WORKSPACE_ROOT;
     if (!workspaceRoot) {
-      throw new Error('WORKSPACE_ROOT environment variable is required');
+      throw new Error("WORKSPACE_ROOT environment variable is required");
     }
     this.workspaceRoot = this.toRealPath(workspaceRoot);
   }
@@ -32,8 +32,8 @@ export class GitService {
   }
 
   private redact(text: string): string {
-    const escapedToken = this.token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return text.replace(new RegExp(escapedToken, 'g'), '***');
+    const escapedToken = this.token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return text.replace(new RegExp(escapedToken, "g"), "***");
   }
 
   private toRealPath(p: string): string {
@@ -59,14 +59,14 @@ export class GitService {
   private isInsideRoot(root: string, candidate: string): boolean {
     const relative = path.relative(root, candidate);
     return (
-      relative === '' ||
-      (!relative.startsWith('..') && !path.isAbsolute(relative))
+      relative === "" ||
+      (!relative.startsWith("..") && !path.isAbsolute(relative))
     );
   }
 
   private validateCloneTargetInRoot(targetDir: string): string {
     if (!path.isAbsolute(targetDir)) {
-      throw new Error('targetDir must be an absolute path.');
+      throw new Error("targetDir must be an absolute path.");
     }
 
     const targetAbs = path.resolve(targetDir);
@@ -92,7 +92,7 @@ export class GitService {
 
   private validateExistingRepoDirInRoot(dir: string): string {
     if (!path.isAbsolute(dir)) {
-      throw new Error('dir must be an absolute path.');
+      throw new Error("dir must be an absolute path.");
     }
 
     const dirReal = this.toRealPath(dir);
@@ -103,11 +103,11 @@ export class GitService {
     }
 
     const gitCheck = spawnSync(
-      'git',
-      ['-C', dirReal, 'rev-parse', '--git-dir'],
+      "git",
+      ["-C", dirReal, "rev-parse", "--git-dir"],
       {
         env: this.buildEnv(),
-        encoding: 'utf-8',
+        encoding: "utf-8",
       },
     );
     if (gitCheck.status !== 0) {
@@ -126,30 +126,30 @@ export class GitService {
   clone(owner: string, repo: string, targetDir: string): GitResult {
     const safeTargetDir = this.validateCloneTargetInRoot(targetDir);
     const url = this.buildAuthUrl(owner, repo);
-    const result = spawnSync('git', ['clone', url, safeTargetDir], {
+    const result = spawnSync("git", ["clone", url, safeTargetDir], {
       env: this.buildEnv(),
-      encoding: 'utf-8',
+      encoding: "utf-8",
     });
 
     return {
       success: result.status === 0,
-      stdout: this.redact((result.stdout as string) || ''),
-      stderr: this.redact((result.stderr as string) || ''),
+      stdout: this.redact((result.stdout as string) || ""),
+      stderr: this.redact((result.stderr as string) || ""),
       exitCode: result.status ?? 1,
     };
   }
 
   pull(dir: string): GitResult {
     const safeDir = this.validateExistingRepoDirInRoot(dir);
-    const result = spawnSync('git', ['-C', safeDir, 'pull'], {
+    const result = spawnSync("git", ["-C", safeDir, "pull"], {
       env: this.buildEnv(),
-      encoding: 'utf-8',
+      encoding: "utf-8",
     });
 
     return {
       success: result.status === 0,
-      stdout: this.redact((result.stdout as string) || ''),
-      stderr: this.redact((result.stderr as string) || ''),
+      stdout: this.redact((result.stdout as string) || ""),
+      stderr: this.redact((result.stderr as string) || ""),
       exitCode: result.status ?? 1,
     };
   }
@@ -157,15 +157,15 @@ export class GitService {
   push(owner: string, repo: string, dir: string, branch: string): GitResult {
     const safeDir = this.validateExistingRepoDirInRoot(dir);
     const url = this.buildAuthUrl(owner, repo);
-    const result = spawnSync('git', ['-C', safeDir, 'push', url, branch], {
+    const result = spawnSync("git", ["-C", safeDir, "push", url, branch], {
       env: this.buildEnv(),
-      encoding: 'utf-8',
+      encoding: "utf-8",
     });
 
     return {
       success: result.status === 0,
-      stdout: this.redact((result.stdout as string) || ''),
-      stderr: this.redact((result.stderr as string) || ''),
+      stdout: this.redact((result.stdout as string) || ""),
+      stderr: this.redact((result.stderr as string) || ""),
       exitCode: result.status ?? 1,
     };
   }

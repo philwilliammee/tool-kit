@@ -1,5 +1,5 @@
-import axios from 'axios';
-import OpenAI from 'openai';
+import axios from "axios";
+import OpenAI from "openai";
 
 export interface ToolCallChunk {
   id: string;
@@ -41,66 +41,81 @@ export interface QueryOptions {
 }
 
 type StreamChunk =
-  | { type: 'content'; data: string }
-  | { type: 'tool_call'; data: ToolCallChunk }
-  | { type: 'tool_result'; data: ToolResult }
-  | { type: 'skill_invoke'; data: { name: string; content: string } }
-  | { type: 'complete'; data: UsageInfo | null }
-  | { type: 'error'; data: string };
+  | { type: "content"; data: string }
+  | { type: "tool_call"; data: ToolCallChunk }
+  | { type: "tool_result"; data: ToolResult }
+  | { type: "skill_invoke"; data: { name: string; content: string } }
+  | { type: "complete"; data: UsageInfo | null }
+  | { type: "error"; data: string };
 
 export async function streamQuery(opts: QueryOptions): Promise<void> {
-  const { serverUrl, token, messages, model, callbacks, workingDirectory, isNewSession, sessionId, signal } = opts;
+  const {
+    serverUrl,
+    token,
+    messages,
+    model,
+    callbacks,
+    workingDirectory,
+    isNewSession,
+    sessionId,
+    signal,
+  } = opts;
 
   const response = await axios.post(
     `${serverUrl}/api/chat/stream`,
     { messages, model, workingDirectory, isNewSession, sessionId },
     {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      responseType: 'stream',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      responseType: "stream",
       timeout: 0,
       signal,
     },
   );
 
   await new Promise<void>((resolve, reject) => {
-    let buffer = '';
+    let buffer = "";
 
-    response.data.on('data', (chunk: Buffer) => {
+    response.data.on("data", (chunk: Buffer) => {
       buffer += chunk.toString();
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
 
       for (const line of lines) {
         if (!line.trim()) continue;
         try {
           const parsed = JSON.parse(line) as StreamChunk;
           switch (parsed.type) {
-            case 'content':
+            case "content":
               callbacks.onContent(parsed.data);
               break;
-            case 'tool_call':
+            case "tool_call":
               callbacks.onToolCall(parsed.data);
               break;
-            case 'tool_result':
+            case "tool_result":
               callbacks.onToolResult(parsed.data);
               break;
-            case 'skill_invoke':
+            case "skill_invoke":
               callbacks.onSkillInvoke?.(parsed.data.name, parsed.data.content);
               break;
-            case 'complete':
+            case "complete":
               callbacks.onComplete(parsed.data);
               resolve();
               break;
-            case 'error':
+            case "error":
               callbacks.onError(parsed.data);
               resolve();
               break;
           }
-        } catch { /* malformed chunk */ }
+        } catch {
+          /* malformed chunk */
+        }
       }
     });
 
-    response.data.on('end', resolve);
-    response.data.on('error', reject);
+    response.data.on("end", resolve);
+    response.data.on("error", reject);
   });
 }

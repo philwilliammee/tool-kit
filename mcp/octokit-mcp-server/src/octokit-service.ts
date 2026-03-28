@@ -12,7 +12,7 @@ export class OctokitService {
   constructor() {
     const token = process.env.GITHUB_TOKEN || process.env.GITHUB_AUTH_TOKEN;
     if (!token) {
-      throw new Error('GITHUB_TOKEN environment variable is required');
+      throw new Error("GITHUB_TOKEN environment variable is required");
     }
 
     this.defaultOctokit = new Octokit({
@@ -32,7 +32,7 @@ export class OctokitService {
       // Execute the GitHub API request
       const response = await octokit.request(
         input.operation,
-        input.parameters || {}
+        input.parameters || {},
       );
 
       // Extract rate limit information from headers
@@ -76,7 +76,7 @@ export class OctokitService {
   async listIssues(
     owner: string,
     repo: string,
-    state?: "open" | "closed" | "all"
+    state?: "open" | "closed" | "all",
   ): Promise<GitHubResult> {
     return this.executeOperation({
       operation: "GET /repos/{owner}/{repo}/issues",
@@ -92,7 +92,7 @@ export class OctokitService {
     repo: string,
     title: string,
     body?: string,
-    labels?: string[]
+    labels?: string[],
   ): Promise<GitHubResult> {
     return this.executeOperation({
       operation: "POST /repos/{owner}/{repo}/issues",
@@ -106,7 +106,7 @@ export class OctokitService {
   async listPullRequests(
     owner: string,
     repo: string,
-    state?: "open" | "closed" | "all"
+    state?: "open" | "closed" | "all",
   ): Promise<GitHubResult> {
     return this.executeOperation({
       operation: "GET /repos/{owner}/{repo}/pulls",
@@ -124,7 +124,7 @@ export class OctokitService {
     head: string,
     base: string,
     body?: string,
-    draft?: boolean
+    draft?: boolean,
   ): Promise<GitHubResult> {
     return this.executeOperation({
       operation: "POST /repos/{owner}/{repo}/pulls",
@@ -138,7 +138,7 @@ export class OctokitService {
   async searchRepositories(
     query: string,
     sort?: "stars" | "forks" | "updated",
-    order?: "asc" | "desc"
+    order?: "asc" | "desc",
   ): Promise<GitHubResult> {
     return this.executeOperation({
       operation: "GET /search/repositories",

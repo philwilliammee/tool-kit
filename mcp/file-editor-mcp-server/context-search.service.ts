@@ -5,10 +5,15 @@
  * handles encoding gracefully. Falls back to JS regex if grep is unavailable.
  */
 
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-import { SearchType, SearchCodeContextParams, SearchCodeContextResponse, CodeMatch } from './file-editor.types';
-import { FileOperationsService } from './file-operations.service';
+import { execFile } from "child_process";
+import { promisify } from "util";
+import {
+  SearchType,
+  SearchCodeContextParams,
+  SearchCodeContextResponse,
+  CodeMatch,
+} from "./file-editor.types";
+import { FileOperationsService } from "./file-operations.service";
 
 const execFileAsync = promisify(execFile);
 
@@ -22,7 +27,9 @@ export class ContextSearchService {
   /**
    * Search for code context in file.
    */
-  async searchCodeContext(params: SearchCodeContextParams): Promise<SearchCodeContextResponse> {
+  async searchCodeContext(
+    params: SearchCodeContextParams,
+  ): Promise<SearchCodeContextResponse> {
     const {
       file_path,
       search_type,
@@ -33,23 +40,41 @@ export class ContextSearchService {
 
     const content = await this.fileOps.readFile(file_path);
     const metadata = await this.fileOps.getFileMetadata(file_path);
-    const lines = content.split('\n');
+    const lines = content.split("\n");
     const imports = include_imports ? this.extractImports(lines) : [];
 
     let matches: CodeMatch[] = [];
 
     switch (search_type) {
-      case 'function':
-        matches = await this.searchFunction(file_path, lines, search_query, context_lines, imports);
+      case "function":
+        matches = await this.searchFunction(
+          file_path,
+          lines,
+          search_query,
+          context_lines,
+          imports,
+        );
         break;
-      case 'class':
-        matches = await this.searchClass(file_path, lines, search_query, context_lines, imports);
+      case "class":
+        matches = await this.searchClass(
+          file_path,
+          lines,
+          search_query,
+          context_lines,
+          imports,
+        );
         break;
-      case 'lines':
+      case "lines":
         matches = this.searchLines(lines, search_query, context_lines, imports);
         break;
-      case 'pattern':
-        matches = await this.searchPattern(file_path, lines, search_query, context_lines, imports);
+      case "pattern":
+        matches = await this.searchPattern(
+          file_path,
+          lines,
+          search_query,
+          context_lines,
+          imports,
+        );
         break;
     }
 
@@ -73,17 +98,24 @@ export class ContextSearchService {
    * Returns null if grep is not available (caller should fall back to JS regex).
    * Grep exit code 1 = no matches (not an error) → returns empty array.
    */
-  private async grepLines(filePath: string, pattern: string): Promise<number[] | null> {
+  private async grepLines(
+    filePath: string,
+    pattern: string,
+  ): Promise<number[] | null> {
     try {
-      const { stdout } = await execFileAsync('grep', ['-nEi', pattern, filePath]);
+      const { stdout } = await execFileAsync("grep", [
+        "-nEi",
+        pattern,
+        filePath,
+      ]);
       return stdout
         .trim()
-        .split('\n')
+        .split("\n")
         .filter(Boolean)
-        .map((line) => parseInt(line.split(':')[0], 10) - 1); // 1-indexed → 0-indexed
+        .map((line) => parseInt(line.split(":")[0], 10) - 1); // 1-indexed → 0-indexed
     } catch (err: any) {
       if (err.code === 1) return []; // grep found no matches — not an error
-      return null;                   // grep unavailable or bad regex → fall back
+      return null; // grep unavailable or bad regex → fall back
     }
   }
 
@@ -101,23 +133,26 @@ export class ContextSearchService {
     lines: string[],
     functionName: string,
     contextLines: number,
-    imports: string[]
+    imports: string[],
   ): Promise<CodeMatch[]> {
     const n = this.escapeForGrep(functionName);
     const pattern =
       `(function[[:space:]]+${n}` +
       `|const[[:space:]]+${n}[[:space:]]*=` +
-      `|${n}[[:space:]]*:[[:space:]]*(async[[:space:]]+)?\\(` +                        // object method
+      `|${n}[[:space:]]*:[[:space:]]*(async[[:space:]]+)?\\(` + // object method
       `|(public[[:space:]]+|private[[:space:]]+|protected[[:space:]]+|static[[:space:]]+|async[[:space:]]+|override[[:space:]]+|abstract[[:space:]]+)*${n}[[:space:]]*\\(` + // TS class method
       `)`;
 
     const grepResult = await this.grepLines(filePath, pattern);
-    const startIndices = grepResult ?? this.jsMatchLines(lines, this.buildFunctionRegex(functionName));
+    const startIndices =
+      grepResult ??
+      this.jsMatchLines(lines, this.buildFunctionRegex(functionName));
 
     const matches: CodeMatch[] = [];
     for (const i of startIndices) {
       const match = this.extractBlock(lines, i, contextLines);
-      if (match) matches.push({ ...match, context: { ...match.context, imports } });
+      if (match)
+        matches.push({ ...match, context: { ...match.context, imports } });
     }
     return matches;
   }
@@ -131,21 +166,27 @@ export class ContextSearchService {
     lines: string[],
     className: string,
     contextLines: number,
-    imports: string[]
+    imports: string[],
   ): Promise<CodeMatch[]> {
     const n = this.escapeForGrep(className);
     const pattern = `(class|interface|type)[[:space:]]+${n}`;
 
     const grepResult = await this.grepLines(filePath, pattern);
-    const startIndices = grepResult ?? this.jsMatchLines(
-      lines,
-      new RegExp(`(?:class|interface|type)\\s+${this.escapeRegex(className)}`, 'i')
-    );
+    const startIndices =
+      grepResult ??
+      this.jsMatchLines(
+        lines,
+        new RegExp(
+          `(?:class|interface|type)\\s+${this.escapeRegex(className)}`,
+          "i",
+        ),
+      );
 
     const matches: CodeMatch[] = [];
     for (const i of startIndices) {
       const match = this.extractBlock(lines, i, contextLines);
-      if (match) matches.push({ ...match, context: { ...match.context, imports } });
+      if (match)
+        matches.push({ ...match, context: { ...match.context, imports } });
     }
     return matches;
   }
@@ -159,7 +200,7 @@ export class ContextSearchService {
     lines: string[],
     pattern: string,
     contextLines: number,
-    imports: string[]
+    imports: string[],
   ): Promise<CodeMatch[]> {
     const grepResult = await this.grepLines(filePath, pattern);
 
@@ -170,9 +211,9 @@ export class ContextSearchService {
       // Fall back to JS regex
       let regex: RegExp;
       try {
-        regex = new RegExp(pattern, 'i');
+        regex = new RegExp(pattern, "i");
       } catch {
-        regex = new RegExp(this.escapeRegex(pattern), 'i');
+        regex = new RegExp(this.escapeRegex(pattern), "i");
       }
       matchedIndices = this.jsMatchLines(lines, regex);
     }
@@ -196,7 +237,12 @@ export class ContextSearchService {
   /**
    * Return lines within a given line range.
    */
-  private searchLines(lines: string[], query: string, contextLines: number, imports: string[]): CodeMatch[] {
+  private searchLines(
+    lines: string[],
+    query: string,
+    contextLines: number,
+    imports: string[],
+  ): CodeMatch[] {
     const range = this.parseLineRange(query);
     if (!range) return [];
 
@@ -207,7 +253,7 @@ export class ContextSearchService {
       {
         start_line: range.start,
         end_line: range.end,
-        content: lines.slice(range.start - 1, range.end).join('\n'),
+        content: lines.slice(range.start - 1, range.end).join("\n"),
         context: {
           before: lines.slice(start, range.start - 1),
           after: lines.slice(range.end, end),
@@ -221,7 +267,11 @@ export class ContextSearchService {
   // Block extraction (brace-counting — still needed after grep finds the start)
   // ---------------------------------------------------------------------------
 
-  private extractBlock(lines: string[], startIndex: number, contextLines: number): CodeMatch | null {
+  private extractBlock(
+    lines: string[],
+    startIndex: number,
+    contextLines: number,
+  ): CodeMatch | null {
     let braceCount = 0;
     let foundStart = false;
     let endIndex = startIndex;
@@ -231,7 +281,10 @@ export class ContextSearchService {
       const close = (lines[i].match(/\}/g) || []).length;
       braceCount += open - close;
       if (!foundStart && open > 0) foundStart = true;
-      if (foundStart && braceCount === 0) { endIndex = i; break; }
+      if (foundStart && braceCount === 0) {
+        endIndex = i;
+        break;
+      }
     }
 
     if (!foundStart || braceCount !== 0) return null;
@@ -239,10 +292,13 @@ export class ContextSearchService {
     return {
       start_line: startIndex + 1,
       end_line: endIndex + 1,
-      content: lines.slice(startIndex, endIndex + 1).join('\n'),
+      content: lines.slice(startIndex, endIndex + 1).join("\n"),
       context: {
         before: lines.slice(Math.max(0, startIndex - contextLines), startIndex),
-        after: lines.slice(endIndex + 1, Math.min(lines.length, endIndex + 1 + contextLines)),
+        after: lines.slice(
+          endIndex + 1,
+          Math.min(lines.length, endIndex + 1 + contextLines),
+        ),
       },
     };
   }
@@ -262,10 +318,10 @@ export class ContextSearchService {
     const n = this.escapeRegex(functionName);
     return new RegExp(
       `(?:function\\s+${n}` +
-      `|const\\s+${n}\\s*=\\s*(?:async\\s*)?\\(` +
-      `|${n}\\s*:\\s*(?:async\\s*)?\\(` +
-      `|(?:(?:public|private|protected|static|async|override|abstract)\\s+)*${n}\\s*\\()`,
-      'i'
+        `|const\\s+${n}\\s*=\\s*(?:async\\s*)?\\(` +
+        `|${n}\\s*:\\s*(?:async\\s*)?\\(` +
+        `|(?:(?:public|private|protected|static|async|override|abstract)\\s+)*${n}\\s*\\()`,
+      "i",
     );
   }
 
@@ -291,19 +347,21 @@ export class ContextSearchService {
   }
 
   private parseLineRange(query: string): { start: number; end: number } | null {
-    const parts = query.split('-').map((p) => parseInt(p.trim(), 10));
-    if (parts.length === 1 && !isNaN(parts[0])) return { start: parts[0], end: parts[0] };
-    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) return { start: parts[0], end: parts[1] };
+    const parts = query.split("-").map((p) => parseInt(p.trim(), 10));
+    if (parts.length === 1 && !isNaN(parts[0]))
+      return { start: parts[0], end: parts[0] };
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1]))
+      return { start: parts[0], end: parts[1] };
     return null;
   }
 
   /** Escape special chars for use inside a grep -E pattern. */
   private escapeForGrep(str: string): string {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   /** Escape special chars for use in a JS RegExp. */
   private escapeRegex(str: string): string {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 }

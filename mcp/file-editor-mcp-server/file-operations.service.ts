@@ -3,11 +3,11 @@
  * Handles safe file I/O, backups, locking, and security
  */
 
-import * as fs from 'fs/promises';
-import * as os from 'os';
-import * as path from 'path';
-import { createHash } from 'crypto';
-import { FileEditorConfig, LockInfo, BackupInfo } from './file-editor.types';
+import * as fs from "fs/promises";
+import * as os from "os";
+import * as path from "path";
+import { createHash } from "crypto";
+import { FileEditorConfig, LockInfo, BackupInfo } from "./file-editor.types";
 
 export class FileOperationsService {
   private config: FileEditorConfig;
@@ -46,14 +46,27 @@ export class FileOperationsService {
       },
       workspace: {
         root_paths: [process.env.WORKSPACE_ROOT || os.homedir()],
-        excluded_patterns: ['node_modules', '.git', 'dist', 'build'],
-        allowed_extensions: ['.js', '.ts', '.jsx', '.tsx', '.json', '.md', '.py', '.java', '.cpp', '.c', '.h', '.hpp'],
+        excluded_patterns: ["node_modules", ".git", "dist", "build"],
+        allowed_extensions: [
+          ".js",
+          ".ts",
+          ".jsx",
+          ".tsx",
+          ".json",
+          ".md",
+          ".py",
+          ".java",
+          ".cpp",
+          ".c",
+          ".h",
+          ".hpp",
+        ],
       },
       security: {
         sandboxing: {
           enabled: true,
           allowed_paths: [process.env.WORKSPACE_ROOT || os.homedir()],
-          denied_paths: ['/etc', '/sys', `${os.homedir()}/.ssh`],
+          denied_paths: ["/etc", "/sys", `${os.homedir()}/.ssh`],
         },
         operation_limits: {
           max_files_per_batch: 50,
@@ -70,7 +83,10 @@ export class FileOperationsService {
     };
   }
 
-  private mergeConfig(defaultConfig: FileEditorConfig, partial: Partial<FileEditorConfig>): FileEditorConfig {
+  private mergeConfig(
+    defaultConfig: FileEditorConfig,
+    partial: Partial<FileEditorConfig>,
+  ): FileEditorConfig {
     return {
       ...defaultConfig,
       ...partial,
@@ -87,29 +103,33 @@ export class FileOperationsService {
    */
   async validatePath(filePath: string): Promise<string> {
     // Resolve absolute path
-    const absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
+    const absolutePath = path.isAbsolute(filePath)
+      ? filePath
+      : path.resolve(process.cwd(), filePath);
     const normalized = path.normalize(absolutePath);
 
     // Security: Check if path is within allowed workspace
     if (this.config.security.sandboxing.enabled) {
-      const isAllowed = this.config.security.sandboxing.allowed_paths.some((allowed) =>
-        normalized.startsWith(path.normalize(allowed))
+      const isAllowed = this.config.security.sandboxing.allowed_paths.some(
+        (allowed) => normalized.startsWith(path.normalize(allowed)),
       );
 
       if (!isAllowed) {
-        const e = new Error(`File path outside allowed workspace: ${normalized}`);
-        (e as any).code = 'PATH_NOT_ALLOWED';
+        const e = new Error(
+          `File path outside allowed workspace: ${normalized}`,
+        );
+        (e as any).code = "PATH_NOT_ALLOWED";
         throw e;
       }
 
       // Check denied paths
-      const isDenied = this.config.security.sandboxing.denied_paths.some((denied) =>
-        normalized.startsWith(path.normalize(denied))
+      const isDenied = this.config.security.sandboxing.denied_paths.some(
+        (denied) => normalized.startsWith(path.normalize(denied)),
       );
 
       if (isDenied) {
         const e = new Error(`Access denied to path: ${normalized}`);
-        (e as any).code = 'PATH_NOT_ALLOWED';
+        (e as any).code = "PATH_NOT_ALLOWED";
         throw e;
       }
     }
@@ -143,7 +163,7 @@ export class FileOperationsService {
       await fs.access(validatedPath, fs.constants.F_OK);
     } catch {
       const e = new Error(`File not found: ${validatedPath}`);
-      (e as any).code = 'FILE_NOT_FOUND';
+      (e as any).code = "FILE_NOT_FOUND";
       throw e;
     }
 
@@ -156,8 +176,13 @@ export class FileOperationsService {
 
     // Check file size
     const stats = await fs.stat(validatedPath);
-    if (this.config.security.validation.check_file_size && stats.size > this.config.editor.max_file_size) {
-      throw new Error(`File too large: ${stats.size} bytes (max: ${this.config.editor.max_file_size})`);
+    if (
+      this.config.security.validation.check_file_size &&
+      stats.size > this.config.editor.max_file_size
+    ) {
+      throw new Error(
+        `File too large: ${stats.size} bytes (max: ${this.config.editor.max_file_size})`,
+      );
     }
 
     // Check if symbolic link
@@ -168,7 +193,7 @@ export class FileOperationsService {
       }
     }
 
-    return await fs.readFile(validatedPath, 'utf-8');
+    return await fs.readFile(validatedPath, "utf-8");
   }
 
   /**
@@ -184,8 +209,8 @@ export class FileOperationsService {
     const stats = await fs.stat(validatedPath);
 
     return {
-      total_lines: content.split('\n').length,
-      encoding: 'utf-8',
+      total_lines: content.split("\n").length,
+      encoding: "utf-8",
       last_modified: stats.mtime.toISOString(),
     };
   }
@@ -193,7 +218,10 @@ export class FileOperationsService {
   /**
    * Acquire file lock
    */
-  async acquireLock(filePath: string, timeout: number = 30000): Promise<boolean> {
+  async acquireLock(
+    filePath: string,
+    timeout: number = 30000,
+  ): Promise<boolean> {
     if (!this.config.safety.enable_file_locking) {
       return true;
     }
@@ -252,19 +280,25 @@ export class FileOperationsService {
   /**
    * Create backup of file
    */
-  async createBackup(filePath: string, operationType: string = 'edit'): Promise<string> {
+  async createBackup(
+    filePath: string,
+    operationType: string = "edit",
+  ): Promise<string> {
     if (!this.config.editor.default_backup_enabled) {
-      return '';
+      return "";
     }
 
     const validatedPath = await this.validatePath(filePath);
 
     try {
       const content = await this.readFile(validatedPath);
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[:.]/g, "-")
+        .slice(0, 19);
       const backupPath = `${validatedPath}.bak-${timestamp}`;
 
-      await fs.writeFile(backupPath, content, 'utf-8');
+      await fs.writeFile(backupPath, content, "utf-8");
 
       // Store backup info
       const backupInfo: BackupInfo = {
@@ -300,14 +334,23 @@ export class FileOperationsService {
     }
 
     const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - this.config.editor.backup_retention_days);
+    cutoffDate.setDate(
+      cutoffDate.getDate() - this.config.editor.backup_retention_days,
+    );
 
     // Filter out old backups
-    const validBackups = backups.filter((backup) => backup.created_at > cutoffDate);
+    const validBackups = backups.filter(
+      (backup) => backup.created_at > cutoffDate,
+    );
 
     // Keep only the most recent N backups
-    const sortedBackups = validBackups.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
-    const keptBackups = sortedBackups.slice(0, this.config.editor.backup_max_count);
+    const sortedBackups = validBackups.sort(
+      (a, b) => b.created_at.getTime() - a.created_at.getTime(),
+    );
+    const keptBackups = sortedBackups.slice(
+      0,
+      this.config.editor.backup_max_count,
+    );
 
     // Delete old backup files
     for (const backup of backups) {
@@ -324,7 +367,11 @@ export class FileOperationsService {
   /**
    * Write file safely (with backup if enabled)
    */
-  async writeFile(filePath: string, content: string, createBackup: boolean = true): Promise<void> {
+  async writeFile(
+    filePath: string,
+    content: string,
+    createBackup: boolean = true,
+  ): Promise<void> {
     const validatedPath = await this.validatePath(filePath);
 
     // Check if locked
@@ -344,7 +391,7 @@ export class FileOperationsService {
       // Create backup if requested
       if (createBackup) {
         try {
-          await this.createBackup(validatedPath, 'edit');
+          await this.createBackup(validatedPath, "edit");
         } catch (error: any) {
           console.warn(`Backup failed: ${error.message}`);
           // Continue anyway if backup fails
@@ -352,7 +399,7 @@ export class FileOperationsService {
       }
 
       // Write file
-      await fs.writeFile(validatedPath, content, 'utf-8');
+      await fs.writeFile(validatedPath, content, "utf-8");
     } finally {
       // Release lock
       if (this.config.safety.enable_file_locking) {
@@ -380,11 +427,13 @@ export class FileOperationsService {
     const originalPath = this.extractOriginalPathFromBackup(normalizedBackup);
 
     if (!originalPath) {
-      throw new Error(`Cannot determine original path from backup: ${backupPath}`);
+      throw new Error(
+        `Cannot determine original path from backup: ${backupPath}`,
+      );
     }
 
     // Read backup content
-    const content = await fs.readFile(normalizedBackup, 'utf-8');
+    const content = await fs.readFile(normalizedBackup, "utf-8");
 
     // Write to original location (skip backup creation for restore operation)
     await this.writeFile(originalPath, content, false);
@@ -404,7 +453,7 @@ export class FileOperationsService {
     }
 
     // Remove the .bak-TIMESTAMP suffix
-    return backupPath.replace(bakPattern, '');
+    return backupPath.replace(bakPattern, "");
   }
 
   /**
@@ -412,7 +461,7 @@ export class FileOperationsService {
    */
   async calculateFileHash(filePath: string): Promise<string> {
     const content = await this.readFile(filePath);
-    return createHash('sha256').update(content).digest('hex');
+    return createHash("sha256").update(content).digest("hex");
   }
 
   /**
@@ -431,14 +480,16 @@ export class FileOperationsService {
   /**
    * Delete file safely
    */
-  async deleteFile(filePath: string, createBackup: boolean = true): Promise<void> {
+  async deleteFile(
+    filePath: string,
+    createBackup: boolean = true,
+  ): Promise<void> {
     const validatedPath = await this.validatePath(filePath);
 
     if (createBackup) {
-      await this.createBackup(validatedPath, 'delete');
+      await this.createBackup(validatedPath, "delete");
     }
 
     await fs.unlink(validatedPath);
   }
 }
-

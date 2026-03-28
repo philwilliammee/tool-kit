@@ -60,7 +60,7 @@ export class BashService {
     if (input.args && input.args.length > 0) {
       // Properly escape arguments
       const escapedArgs = input.args.map((arg) =>
-        arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg
+        arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg,
       );
       fullCommand += " " + escapedArgs.join(" ");
     }

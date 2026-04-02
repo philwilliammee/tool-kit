@@ -4,6 +4,9 @@
       "name": "tool-kit",
       "path": "./",
     },
+    // {
+    //   "path": "../../claude-code-source",
+    // },
     {
       "name": "mcp: bash-server",
       "path": "./mcp/bash-server",

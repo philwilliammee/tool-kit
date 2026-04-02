@@ -10,9 +10,26 @@ const MAX_AGE_DAYS = 7;
 const MAX_MESSAGES_TO_AI = 50;
 const MAX_OUTPUT_BYTES = 10_240;
 
+/**
+ * Discriminates the purpose of a message so compaction and display
+ * can treat them differently without parsing content.
+ *
+ * - user / assistant  : normal conversation turns
+ * - system            : injected context (hooks, skills, env info)
+ * - compact_summary   : LLM-generated compaction summary
+ * - compact_boundary  : tombstone marking where a compaction occurred
+ */
+export type MessageType =
+  | "user"
+  | "assistant"
+  | "system"
+  | "compact_summary"
+  | "compact_boundary";
+
 export interface SessionMessage {
   timestamp: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
+  type: MessageType;
   content: string;
 }
 
@@ -41,6 +58,10 @@ export interface Session {
   filesViewed: string[];
   skillInjections: SkillInjection[];
   totalTokens: number;
+  /** Path to the JSONL archive written by the last /compact, if any. */
+  archivePath?: string;
+  /** Last usage breakdown for /cost display. */
+  lastUsage?: { promptTokens: number; completionTokens: number };
 }
 
 function sessionKey(cwd: string): string {
@@ -62,6 +83,10 @@ export function loadSession(cwd: string): Session {
       const saved = JSON.parse(fs.readFileSync(filePath, "utf-8")) as Session;
       if (!saved.skillInjections) saved.skillInjections = [];
       if (saved.totalTokens === undefined) saved.totalTokens = 0;
+      // Backward compat: add type to messages that predate the type field
+      saved.messages = saved.messages.map((m) =>
+        m.type ? m : { ...m, type: m.role as MessageType },
+      );
       return saved;
     } catch {
       /* fall through to create new */
@@ -107,10 +132,34 @@ export function cleanupOldSessions(): void {
 
 export function addMessage(
   session: Session,
-  role: "user" | "assistant",
+  role: "user" | "assistant" | "system",
   content: string,
+  type?: MessageType,
 ): void {
-  session.messages.push({ timestamp: new Date().toISOString(), role, content });
+  session.messages.push({
+    timestamp: new Date().toISOString(),
+    role,
+    type: type ?? (role as MessageType),
+    content,
+  });
+}
+
+/**
+ * Write current messages to a JSONL archive file and return its path.
+ * Each line is: { turn: N, role, type, content, timestamp }
+ */
+export function archiveSession(session: Session): string {
+  fs.mkdirSync(SESSION_DIR, { recursive: true });
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const archivePath = path.join(
+    SESSION_DIR,
+    `${session.sessionKey}-archive-${ts}.jsonl`,
+  );
+  const lines = session.messages.map((m, i) =>
+    JSON.stringify({ turn: i + 1, role: m.role, type: m.type, content: m.content, timestamp: m.timestamp }),
+  );
+  fs.writeFileSync(archivePath, lines.join("\n") + "\n");
+  return archivePath;
 }
 
 export function addToolCall(
@@ -132,14 +181,18 @@ export function addToolCall(
   });
 }
 
-// Returns the last N messages as OpenAI message params for the API request
+// Returns the last N messages as OpenAI message params for the API request.
+// compact_boundary messages are stripped (they are meta-markers, not context).
 export function getApiMessages(
   session: Session,
 ): OpenAI.ChatCompletionMessageParam[] {
-  return session.messages.slice(-MAX_MESSAGES_TO_AI).map((m) => ({
-    role: m.role,
-    content: m.content,
-  }));
+  return session.messages
+    .filter((m) => m.type !== "compact_boundary")
+    .slice(-MAX_MESSAGES_TO_AI)
+    .map((m) => ({
+      role: m.role as "user" | "assistant" | "system",
+      content: m.content,
+    }));
 }
 
 export function sessionStats(session: Session): string {

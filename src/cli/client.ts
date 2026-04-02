@@ -61,19 +61,32 @@ export async function streamQuery(opts: QueryOptions): Promise<void> {
     signal,
   } = opts;
 
-  const response = await axios.post(
-    `${serverUrl}/api/chat/stream`,
-    { messages, model, workingDirectory, isNewSession, sessionId },
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+  let response;
+  try {
+    response = await axios.post(
+      `${serverUrl}/api/chat/stream`,
+      { messages, model, workingDirectory, isNewSession, sessionId },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        responseType: "stream",
+        timeout: 0,
+        signal,
       },
-      responseType: "stream",
-      timeout: 0,
-      signal,
-    },
-  );
+    );
+  } catch (err) {
+    if (axios.isAxiosError(err)) {
+      if (err.response?.status === 401) {
+        throw new Error(
+          "Unauthorized (401): API token mismatch. Ensure CLI --token/API_TOKEN matches the server API_TOKEN.",
+        );
+      }
+      throw new Error(err.message);
+    }
+    throw err;
+  }
 
   await new Promise<void>((resolve, reject) => {
     let buffer = "";

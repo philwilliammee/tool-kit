@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "CLI AI agent backed by LiteLLM and MCP servers",
   "bin": {
+    "ai": "./dist/cli/cli.js",
     "tool-kit": "./dist/cli/cli.js",
     "tool-kit-server": "./dist/server/server.js"
   },

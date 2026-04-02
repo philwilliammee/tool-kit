@@ -1,6 +1,6 @@
-# docs/
+[← Project root](../README.md)
 
-Project documentation for tool-kit.
+# Documentation Index
 
 | Document | Description |
 |----------|-------------|
@@ -9,6 +9,3 @@ Project documentation for tool-kit.
 | [phase6-spec.md](./phase6-spec.md) | Phase 6 design — skill auto-invocation via LLM Skill tool, skill-scoped hooks, SessionStart hook, `--skill` flag, `once` handler flag |
 | [phase7-spec.md](./phase7-spec.md) | Phase 7 design — architecture improvements |
 | [phase7-architectural-improvements.md](./phase7-architectural-improvements.md) | Phase 7 architectural improvements detail |
-| [index.md](./index.md) | Documentation table of contents |
-
-[← Project root](../README.md)

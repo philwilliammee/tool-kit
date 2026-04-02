@@ -1,5 +1,6 @@
 import * as path from "path";
 import * as fs from "fs";
+import * as os from "os";
 
 export interface McpServerConfig {
   command: string;
@@ -46,9 +47,10 @@ function loadMcpConfig(configPath: string): Record<string, McpServerConfig> {
   return result;
 }
 
-// Resolve MCP_ROOT before loading the MCP config so ${MCP_ROOT} substitution works.
+// Resolve path defaults before loading the MCP config so ${VAR} substitution works.
 const projectRoot = path.join(__dirname, "../../");
 process.env.MCP_ROOT = process.env.MCP_ROOT ?? path.join(projectRoot, "mcp");
+process.env.WORKSPACE_ROOT = process.env.WORKSPACE_ROOT ?? os.homedir();
 
 const mcpConfigPath =
   process.env.MCP_CONFIG_PATH ??

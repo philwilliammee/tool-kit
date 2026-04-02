@@ -4,6 +4,34 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { execSync } from "child_process";
+
+// Auto-load .env from project root (two levels up from dist/cli/cli.js)
+// so the binary works without --env-file or manual exports.
+(function loadEnv() {
+  const projectRoot = path.resolve(__dirname, "../../");
+  const envPath = path.join(projectRoot, ".env");
+  if (!fs.existsSync(envPath)) return;
+  const lines = fs.readFileSync(envPath, "utf-8").split("\n");
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    let value = trimmed.slice(eqIdx + 1).trim();
+    // Strip surrounding quotes
+    if (
+      (value.startsWith("'") && value.endsWith("'")) ||
+      (value.startsWith('"') && value.endsWith('"'))
+    ) {
+      value = value.slice(1, -1);
+    }
+    // Don't overwrite values already set in the environment
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+})();
 import { Command } from "commander";
 import OpenAI from "openai";
 import {
@@ -14,6 +42,7 @@ import {
   addToolCall,
   getApiMessages,
   sessionStats,
+  archiveSession,
   Session,
   SkillInjection,
 } from "./session";
@@ -98,7 +127,32 @@ Always pass cwd: "${cwd}" when invoking bash tools so commands run in the correc
 - If a tool call fails or returns an error, report the actual error. Do not invent a plausible-sounding result.
 - If a requested tool is not in your tool list, say so clearly. Do not attempt workarounds or pretend the call succeeded.
 - If you are unsure what a tool will return, call it and find out. Do not guess.
-- Only report what tools actually return. Never summarise, paraphrase, or extend tool output with invented content.${agentsBlock ? `\n\n## User Instructions\n${agentsBlock}` : ""}`;
+- Only report what tools actually return. Never summarise, paraphrase, or extend tool output with invented content.
+
+## Memory
+You can persist important facts, decisions, and context across sessions by writing to AGENTS.md.
+- Project memory: ${cwd}/AGENTS.md — use file-editor or bash to create/edit it
+- Global memory: ~/.tool-kit/AGENTS.md — for cross-project facts
+When you learn something worth remembering (architecture decisions, user preferences, recurring patterns),
+append it to AGENTS.md. You can also clean up or remove outdated entries.
+
+## REPL Slash Commands
+The user's CLI has these built-in commands (handled client-side, not by you):
+  /help            Show all available commands
+  /compact         Summarize and archive conversation history
+  /cost            Show token usage for this session
+  /model [name]    Show or switch the active model
+  /memory          Show AGENTS.md (project or global)
+  /history [n]     Show last N conversation turns (default 10)
+  /tools           List all available MCP tools
+  /skills          List available skills
+  /hooks           Show active hook configuration
+  /session         Show session statistics
+  /clear           Clear conversation history
+  .open <path>     View a file inline
+  /<skill-name>    Inject a skill into context
+  exit / quit      Exit the REPL
+If asked about slash commands, refer to this list.${agentsBlock ? `\n\n## User Instructions\n${agentsBlock}` : ""}`;
 }
 
 async function runQuery(
@@ -180,7 +234,13 @@ async function runQuery(
           printInfo(`Skill '${name}' auto-invoked and injected into context.`);
         },
         onComplete(usage: UsageInfo | null) {
-          if (usage) session.totalTokens = usage.totalTokens;
+          if (usage) {
+            session.totalTokens += usage.totalTokens;
+            session.lastUsage = {
+              promptTokens: usage.promptTokens,
+              completionTokens: usage.completionTokens,
+            };
+          }
           if (!spinnerStopped) {
             spinner.stop();
             spinnerStopped = true;
@@ -256,6 +316,7 @@ async function interactiveMode(
   }
 
   let isFirstQuery = true;
+  let currentModel = model; // mutable so /model can change it mid-session
 
   printBanner();
 
@@ -286,24 +347,101 @@ async function interactiveMode(
       } else if (input === "exit" || input === "quit") {
         rl.close();
         return;
-      } else if (input === ".session") {
+
+      // ── /session (.session alias) ────────────────────────────────────────────
+      } else if (input === "/session" || input === ".session") {
         printInfo(sessionStats(session));
-      } else if (input === ".clear") {
+
+      // ── /clear (.clear alias) ────────────────────────────────────────────────
+      } else if (input === "/clear" || input === ".clear") {
         session.messages = [];
         session.skillInjections = [];
         saveSession(session);
         printInfo("Session messages cleared.");
-      } else if (input === ".tools") {
-        if (session.toolCalls.length === 0) {
-          printInfo("No tool calls this session.");
+
+      // ── /cost ────────────────────────────────────────────────────────────────
+      } else if (input === "/cost") {
+        const u = session.lastUsage;
+        if (!session.totalTokens && !u) {
+          printInfo("No token usage recorded yet.");
+        } else if (u) {
+          printInfo(
+            `Last call — prompt: ${u.promptTokens.toLocaleString()}, ` +
+            `completion: ${u.completionTokens.toLocaleString()}\n` +
+            `Session total: ${session.totalTokens.toLocaleString()} tokens (cumulative)`,
+          );
         } else {
-          for (const tc of session.toolCalls) {
-            printInfo(
-              `[${new Date(tc.timestamp).toLocaleTimeString()}] ${tc.tool} → ${tc.resultLength} bytes`,
-            );
+          printInfo(`Session total: ${session.totalTokens.toLocaleString()} tokens (cumulative)`);
+        }
+
+      // ── /model [name] ────────────────────────────────────────────────────────
+      } else if (input === "/model" || input.startsWith("/model ")) {
+        const newModel = input.slice(7).trim();
+        if (!newModel) {
+          printInfo(`Current model: ${currentModel}`);
+        } else {
+          currentModel = newModel;
+          printInfo(`Model switched to: ${currentModel}`);
+        }
+
+      // ── /history [n] ─────────────────────────────────────────────────────────
+      } else if (input === "/history" || input.startsWith("/history ")) {
+        const n = parseInt(input.slice(9).trim() || "10", 10) || 10;
+        const msgs = session.messages.slice(-n);
+        if (msgs.length === 0) {
+          printInfo("No conversation history.");
+        } else {
+          printInfo(`Last ${msgs.length} turn(s):`);
+          for (const m of msgs) {
+            const when = new Date(m.timestamp).toLocaleTimeString();
+            const label = m.role.toUpperCase().padEnd(9);
+            const preview = m.content.slice(0, 120).replace(/\n/g, " ");
+            printInfo(`[${when}] ${label} ${preview}${m.content.length > 120 ? "…" : ""}`);
           }
         }
-      } else if (input === ".skills") {
+
+      // ── /memory ──────────────────────────────────────────────────────────────
+      } else if (input === "/memory") {
+        const projectAgents = path.join(cwd, "AGENTS.md");
+        const globalAgents = path.join(os.homedir(), ".tool-kit", "AGENTS.md");
+        const memFile = fs.existsSync(projectAgents)
+          ? projectAgents
+          : fs.existsSync(globalAgents)
+          ? globalAgents
+          : null;
+        if (!memFile) {
+          printInfo("No AGENTS.md found in project or ~/.tool-kit/");
+        } else {
+          printInfo(`--- ${memFile} ---`);
+          process.stdout.write(fs.readFileSync(memFile, "utf-8"));
+          printInfo("--- end ---");
+        }
+
+      // ── /tools ───────────────────────────────────────────────────────────────
+      } else if (input === "/tools") {
+        try {
+          const axios = require("axios");
+          const resp = await axios.get(`${serverUrl}/api/tools`, {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 10_000,
+          });
+          const tools = resp.data.tools as Array<{ name: string; description: string }>;
+          if (!tools.length) {
+            printInfo("No MCP tools available.");
+          } else {
+            printInfo(`Available tools (${tools.length}):`);
+            const maxName = Math.max(...tools.map((t) => t.name.length), 4);
+            for (const t of tools) {
+              const desc = (t.description ?? "").split("\n")[0].slice(0, 60);
+              printInfo(`  ${t.name.padEnd(maxName)}  ${desc}`);
+            }
+          }
+        } catch (err) {
+          printError(`Failed to fetch tools: ${(err as Error).message}`);
+        }
+
+      // ── /skills (.skills alias) ──────────────────────────────────────────────
+      } else if (input === "/skills" || input === ".skills") {
         const skills = listSkills();
         if (skills.length === 0) {
           printInfo(
@@ -317,11 +455,14 @@ async function interactiveMode(
             printInfo(`${s.name.padEnd(maxName)}  ${s.description}`);
           }
         }
-      } else if (input === ".hooks") {
+
+      // ── /hooks (.hooks alias) ────────────────────────────────────────────────
+      } else if (input === "/hooks" || input === ".hooks") {
         const hooks = new HooksService(cwd);
         printInfo("Active hook configuration:\n" + hooks.configSummary());
+
+      // ── .open <path> ─────────────────────────────────────────────────────────
       } else if (input.startsWith(".open ")) {
-        // Inline file viewer: .open <path>
         const fileArg = input.slice(6).trim();
         const resolved = path.isAbsolute(fileArg)
           ? fileArg
@@ -343,21 +484,46 @@ async function interactiveMode(
             printError(`Failed to open file: ${(e as Error).message}`);
           }
         }
+
+      // ── /compact ─────────────────────────────────────────────────────────────
       } else if (input === "/compact") {
         const msgCount = session.messages.length;
         if (msgCount === 0) {
           printInfo("Nothing to compact — session is empty.");
         } else {
-          const spinner = startSpinner(`Compacting ${msgCount} messages…`);
+          const spinner = startSpinner(`Archiving ${msgCount} messages and compacting…`);
+
+          // 1. Archive full conversation to JSONL
+          let archivePath: string;
+          try {
+            archivePath = archiveSession(session);
+          } catch (err) {
+            spinner.stop();
+            printError(`Failed to archive session: ${(err as Error).message}`);
+            return;
+          }
+
+          // 2. Build compaction prompt with line-reference instruction
           const conversationText = session.messages
-            .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
+            .map((m, i) => `Turn ${i + 1} [${m.role.toUpperCase()}]: ${m.content}`)
             .join("\n\n---\n\n");
+
           const compactMessages: OpenAI.ChatCompletionMessageParam[] = [
             {
               role: "user",
-              content: `Summarize the following conversation into a concise but complete context brief. Preserve all important decisions, findings, code changes, file paths, and open questions. Write it as a first-person assistant context note.\n\n${conversationText}`,
+              content:
+                `Summarize the following conversation into a concise but complete context brief.\n` +
+                `The full transcript has been archived at: ${archivePath}\n` +
+                `Each line in the archive is a JSON record with a "turn" number.\n\n` +
+                `In your summary, include line references for major topic sections so that\n` +
+                `specific parts of the conversation can be reloaded later. Format each section as:\n` +
+                `  "Lines X-Y: [topic description]"\n\n` +
+                `Preserve all important decisions, findings, code changes, file paths, and open questions.\n` +
+                `Write it as a first-person assistant context note.\n\n` +
+                `Conversation:\n\n${conversationText}`,
             },
           ];
+
           let summary = "";
           let compactFailed = false;
           const compactAbort = new AbortController();
@@ -366,16 +532,14 @@ async function interactiveMode(
             await streamQuery({
               serverUrl,
               token,
-              model,
+              model: currentModel,
               messages: compactMessages,
               workingDirectory: cwd,
               isNewSession: true,
               sessionId: session.sessionId,
               signal: compactAbort.signal,
               callbacks: {
-                onContent: (d) => {
-                  summary += d;
-                },
+                onContent: (d) => { summary += d; },
                 onToolCall: () => {},
                 onToolResult: () => {},
                 onComplete: () => {},
@@ -392,30 +556,60 @@ async function interactiveMode(
             const timedOut = compactAbort.signal.aborted;
             printError(
               timedOut
-                ? "Compact timed out — try again or use .clear to reset the session."
+                ? "Compact timed out — try again or use /clear to reset."
                 : `Compact failed: ${(err as Error).message}`,
             );
           } finally {
             clearTimeout(compactTimeout);
           }
+
           if (!compactFailed) {
             spinner.stop();
+            // Replace messages with summary + boundary marker
             session.messages = [
               {
                 timestamp: new Date().toISOString(),
-                role: "assistant",
-                content: `[Compacted from ${msgCount} messages]\n\n${summary}`,
+                role: "system",
+                type: "compact_boundary",
+                content: `[Compacted from ${msgCount} messages. Archive: ${archivePath}]`,
+              },
+              {
+                timestamp: new Date().toISOString(),
+                role: "system",
+                type: "compact_summary",
+                content: summary,
               },
             ];
+            session.archivePath = archivePath;
             session.totalTokens = 0;
             saveSession(session);
             printInfo(
-              `Compacted ${msgCount} messages → 1 summary. Context reset.`,
+              `Compacted ${msgCount} messages → summary. Archive: ${archivePath}`,
             );
           }
         }
+
+      // ── /help ────────────────────────────────────────────────────────────────
+      } else if (input === "/help") {
+        printInfo([
+          "Commands:",
+          "  /compact        Summarize conversation history, archive full transcript",
+          "  /cost           Show token usage for this session",
+          "  /model [name]   Show or switch the active model",
+          "  /memory         Show AGENTS.md (project or global)",
+          "  /history [n]    Show last N conversation turns (default 10)",
+          "  /tools          List all available MCP tools",
+          "  /skills         List available skills",
+          "  /hooks          Show active hook configuration",
+          "  /session        Show session statistics",
+          "  /clear          Clear conversation history",
+          "  .open <path>    View a file inline",
+          "  exit / quit     Exit the REPL",
+          "  /<skill-name>   Inject a skill into context",
+        ].join("\n"));
+
+      // ── /skill-name [args] ───────────────────────────────────────────────────
       } else if (input.startsWith("/")) {
-        // Skill invocation: /skill-name [args...]
         const spaceIdx = input.indexOf(" ");
         const skillName = (
           spaceIdx === -1 ? input.slice(1) : input.slice(1, spaceIdx)
@@ -430,7 +624,7 @@ async function interactiveMode(
 
         if (!rendered) {
           printError(
-            `Skill not found: ${skillName}. Type .skills to list available skills.`,
+            `Unknown command or skill: /${skillName}. Type /help for available commands.`,
           );
         } else {
           const injection: SkillInjection = {
@@ -442,13 +636,15 @@ async function interactiveMode(
           saveSession(session);
           printInfo(`Skill '${skillName}' injected into context.`);
         }
+
+      // ── regular query ────────────────────────────────────────────────────────
       } else {
         await runQuery(
           input,
           session,
           serverUrl,
           token,
-          model,
+          currentModel,
           isFirstQuery,
           contextLines,
           includeHistory,
